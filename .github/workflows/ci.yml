@@ -1,0 +1,195 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-policy:
+    name: repo-policy
+    runs-on: ubuntu-latest
+    outputs:
+      has-rust: ${{ steps.detect.outputs.has-rust }}
+      has-python: ${{ steps.detect.outputs.has-python }}
+      has-java: ${{ steps.detect.outputs.has-java }}
+      has-docker: ${{ steps.detect.outputs.has-docker }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate repository policy files
+        run: |
+          test -f AGENTS.md
+          jq empty .devcontainer/devcontainer.json
+          jq empty .vscode/extensions.json
+          git diff --check
+
+      - name: Detect project manifests
+        id: detect
+        run: |
+          if [ -f Cargo.toml ]; then
+            echo "has-rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-rust=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ] || [ -f requirements.txt ]; then
+            echo "has-python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-python=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -f pom.xml ] || [ -f build.gradle ] || [ -f build.gradle.kts ] || [ -f gradlew ] || [ -f mvnw ]; then
+            echo "has-java=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-java=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -f Dockerfile ]; then
+            echo "has-docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-docker=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  rust-build:
+    name: rust-build
+    runs-on: ubuntu-latest
+    needs: repo-policy
+    if: ${{ needs.repo-policy.outputs.has-rust == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.92
+        uses: dtolnay/rust-toolchain@1.92
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all --all-features
+
+  python-build:
+    name: python-build
+    runs-on: ubuntu-latest
+    needs: repo-policy
+    if: ${{ needs.repo-policy.outputs.has-python == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f pyproject.toml ]; then
+            python -m pip install '.[test]'
+          elif [ -f setup.py ] || [ -f setup.cfg ]; then
+            python -m pip install '.[test]'
+          elif [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+
+      - name: Test
+        run: |
+          if [ -d qa/unit ] || [ -d tests ]; then
+            python -m pytest
+          else
+            echo "Python project files exist, but no Python test suite is defined."
+            exit 1
+          fi
+
+  java-build:
+    name: java-build
+    runs-on: ubuntu-latest
+    needs: repo-policy
+    if: ${{ needs.repo-policy.outputs.has-java == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        if: ${{ hashFiles('build.gradle', 'build.gradle.kts', 'gradlew') != '' }}
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build with Gradle wrapper
+        if: ${{ hashFiles('gradlew') != '' }}
+        run: ./gradlew build
+
+      - name: Build with Gradle
+        if: ${{ hashFiles('gradlew') == '' && hashFiles('build.gradle', 'build.gradle.kts') != '' }}
+        run: gradle build
+
+      - name: Build with Maven wrapper
+        if: ${{ hashFiles('mvnw') != '' }}
+        run: ./mvnw verify
+
+      - name: Build with Maven
+        if: ${{ hashFiles('mvnw') == '' && hashFiles('pom.xml') != '' }}
+        run: mvn --batch-mode verify
+
+  container-build:
+    name: container-build
+    runs-on: ubuntu-latest
+    needs: repo-policy
+    if: ${{ needs.repo-policy.outputs.has-docker == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate lightweight container expectations
+        run: |
+          from_count="$(grep -Ec '^[[:space:]]*FROM[[:space:]]+' Dockerfile)"
+          test "$from_count" -ge 2
+          grep -Eiq 'alpine|musl' Dockerfile
+
+      - name: Build image
+        run: docker build .
+
+  required:
+    name: required
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - repo-policy
+      - rust-build
+      - python-build
+      - java-build
+      - container-build
+    steps:
+      - name: Require successful active checks
+        run: |
+          results='${{ toJSON(needs.*.result) }}'
+          echo "Upstream job results: $results"
+          if echo "$results" | jq -e 'any(.[]; . == "failure" or . == "cancelled")' >/dev/null; then
+            echo "One or more active CI jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "All active CI jobs passed; skipped jobs are not yet applicable."
