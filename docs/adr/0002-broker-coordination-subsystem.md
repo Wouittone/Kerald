@@ -38,6 +38,30 @@ Protocol-level requirements for the coordination subsystem:
 4. **Recoverable view change**: failover must preserve safety and avoid split-brain commitment.
 5. **Efficient batching and pipelining**: implementation should favor high throughput and low overhead, aligned with Kerald's efficiency-first mission.
 
+## VSR Algorithm Summary
+
+Viewstamped Replication organizes a replica group around a monotonically increasing **view**. Each view has one primary and multiple backups. The primary orders client commands by appending them to a replicated operation log, while backups verify the current view, persist the ordered operation, and acknowledge it. Once the primary receives acknowledgements from a quorum, the operation is committed and can be applied to the deterministic state machine.
+
+For Kerald, the VSR log is a control-plane log rather than a client-visible offset model. It records cluster metadata, fencing epochs, admission state, and configuration decisions. The log may use internal operation numbers for replication, but those numbers must not become client progress cursors; client-visible progress remains based on nanosecond timestamps as required by ADR 0001.
+
+Normal operation:
+
+1. A broker routes or forwards an admissible control-plane command to the current primary for the active view.
+2. The primary assigns the next operation number, appends the command to its durable log, and sends a prepare message to backups.
+3. Backups reject messages from stale views, persist valid prepares in order, and acknowledge the primary.
+4. The primary commits the operation after quorum acknowledgement, advances the commit point, and broadcasts the committed point.
+5. Replicas apply committed operations in deterministic log order before exposing the resulting coordination state.
+
+View change and recovery:
+
+1. Replicas suspect the primary when progress stalls or the primary cannot prove quorum health.
+2. Replicas move to a higher view and exchange their durable log, commit point, and view metadata.
+3. The new primary is selected deterministically for the new view and reconstructs the safest log from quorum state.
+4. Any operation committed in an earlier view must be preserved in the new view.
+5. Brokers that are behind replay committed state before they can participate in write admission.
+
+TigerBeetle-style implementation choices should emphasize static or explicitly reconfigured replica sets, deterministic execution, bounded resource usage, batched prepares, pipelined replication, durable writes before acknowledgement, and aggressive fencing of stale primaries. These choices are intended to keep the coordination path efficient while preserving safety-first admission under ambiguous failures.
+
 ## Alternatives Considered
 
 1. **Classic Raft**
