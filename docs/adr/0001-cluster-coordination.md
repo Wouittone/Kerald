@@ -16,6 +16,8 @@ Kerald clustered mode will use a replicated coordination log for cluster metadat
 
 The initial clustered model will use a fixed voting set configured at cluster creation. A write is admissible only when the accepting broker can prove that the coordination quorum and required durability path are available for the current admission epoch. If quorum, storage, or replication health is uncertain, the broker rejects ingress with an explicit unsafe-admission error.
 
+The specific broker coordination algorithm is selected separately in ADR 0002. This ADR defines the required safety model and externally observable coordination behavior that the algorithm must satisfy.
+
 Replication expectations:
 
 - Coordination decisions require a quorum of the configured voting set.
