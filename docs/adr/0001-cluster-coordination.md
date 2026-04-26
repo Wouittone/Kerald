@@ -4,7 +4,7 @@ Status: Proposed
 
 ## Context
 
-Kerald must support both standalone and clustered broker modes while preserving partitionless topics. Any node may accept writes, but ingress must be rejected when eventual delivery guarantees cannot be upheld.
+Kerald must support both single-node and multi-node cluster operation while preserving partitionless topics. Any node may accept writes, but ingress must be rejected when eventual delivery guarantees cannot be upheld.
 
 Cluster coordination needs to be resilient under node failure, network interruption, restart, and storage recovery. The model is TigerBeetle-inspired: deterministic state transitions, explicit quorum requirements, durable replicated decisions, and conservative admission when the cluster cannot prove safety.
 
@@ -14,13 +14,13 @@ This decision must not introduce partition-based APIs or offset-based progress. 
 
 Kerald clustered mode will use a replicated coordination log for cluster metadata and write-admission decisions. The log records deterministic decisions for membership, topic metadata, broker health, durability commitments, and ingress admission epochs.
 
-The initial clustered model will use a fixed voting set configured at cluster creation. A write is admissible only when the accepting broker can prove that the coordination quorum and required durability path are available for the current admission epoch. If quorum, storage, or replication health is uncertain, the broker rejects ingress with an explicit unsafe-admission error.
+The initial cluster model will use the configured expected broker count to calculate quorum. Brokers configure the inter-broker communication port, not a peer-address list. All brokers discovered through inter-broker communication are voters. A write is admissible only when the accepting broker can prove that the coordination quorum and required durability path are available for the current admission epoch. If quorum, storage, or replication health is uncertain, the broker rejects ingress with an explicit unsafe-admission error.
 
 The specific broker coordination algorithm is selected separately in ADR 0002. This ADR defines the required safety model and externally observable coordination behavior that the algorithm must satisfy.
 
 Replication expectations:
 
-- Coordination decisions require a quorum of the configured voting set.
+- Coordination decisions require a quorum of the expected broker count.
 - A committed coordination decision is durable before it is externally observed.
 - Brokers apply committed decisions in log order.
 - Broker-local state may cache committed decisions but must not invent authority outside the committed log.
@@ -34,7 +34,7 @@ Failure handling:
 
 Required observability signals:
 
-- Current coordination role and voting-set membership.
+- Current coordination role, expected broker count, and discovered voter membership.
 - Quorum availability and loss-of-quorum transitions.
 - Coordination commit latency and replication lag.
 - Admission epoch changes.
@@ -62,14 +62,14 @@ Positive consequences:
 
 Negative consequences:
 
-- Clustered mode requires a quorum-capable coordination subsystem before accepting writes.
+- Multi-node operation requires a quorum-capable coordination subsystem before accepting writes.
 - Conservative rejection can reduce availability during ambiguous failures.
 - Membership changes require careful rollout because they affect quorum and admission epochs.
 
 ## Rollout or Migration Notes
 
-Implement standalone mode first with the same admission interface used by clustered mode. Add clustered coordination behind an explicit configuration path, initially with static voting membership.
+Implement single-node cluster operation first with the same admission interface used by multi-node operation. Add multi-node coordination behind an explicit configuration path, initially using expected broker count plus dynamic inter-broker voter discovery.
 
-Before enabling dynamic membership, add a follow-up ADR for membership changes, reconfiguration safety, and operator workflows.
+Before enabling expected broker count changes, add a follow-up ADR for membership changes, reconfiguration safety, and operator workflows.
 
-Add behavior tests for loss of quorum, broker rejoin, unsafe-admission rejection, and partitionless writes accepted by different brokers in the same cluster.
+Add behavior tests for single-node quorum, loss of quorum, broker rejoin, unsafe-admission rejection, and partitionless writes accepted by different brokers in the same cluster.

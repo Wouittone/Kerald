@@ -9,7 +9,7 @@ Build Kerald as a distributed messaging framework that is:
 - Efficiency-first (CPU, memory, network, storage), while preserving strong performance.
 
 ## 2) Core Architecture Constraints (MUST)
-1. Support both standalone broker mode and clustered broker mode.
+1. Support both single-node and multi-node cluster operation.
 2. Cluster coordination follows TigerBeetle-inspired consistency and resilience principles.
 3. Topics are **partitionless**:
    - Any node can accept writes.
@@ -27,7 +27,7 @@ Build Kerald as a distributed messaging framework that is:
 10. Persistence is Lance read/write only (no embedded LanceDB query responsibilities in brokers).
 11. Storage abstraction must use OpenDAL (local FS, S3, R2, GCS, Azure Blob support path).
 12. Language/runtime targets:
-   - Rust 1.92
+   - Rust 1.95
    - Python 3.10+ bindings via PyO3
    - Java 25+ bindings via FFM API (no JNI)
 13. Production telemetry must include OTel logs, metrics, and traces.
@@ -104,10 +104,10 @@ Before requesting review, verify and document:
 - `docs/adr/`
 - `docs/architecture/`
 - `docs/operations/`
-- `qa/unit/`
-- `qa/integration/`
-- `qa/performance/`
-- `qa/cucumber/`
+- `tests/unit-tests/`
+- `tests/integration/`
+- `tests/performance/`
+- `tests/cucumber/`
 
 ## 11) Agent Operating Procedure
 1. Read this AGENTS.md before planning or editing.
