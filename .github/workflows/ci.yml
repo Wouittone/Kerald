@@ -71,8 +71,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install Rust 1.92
-        uses: dtolnay/rust-toolchain@1.92
+      - name: Install Rust 1.95
+        uses: dtolnay/rust-toolchain@1.95
         with:
           components: rustfmt, clippy
 
@@ -113,7 +113,7 @@ jobs:
 
       - name: Test
         run: |
-          if [ -d qa/unit ] || [ -d tests ]; then
+          if [ -d tests ]; then
             python -m pytest
           else
             echo "Python project files exist, but no Python test suite is defined."
