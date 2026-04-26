@@ -2,7 +2,7 @@
 
 Kerald targets these language and runtime boundaries:
 
-- Rust 1.92 for broker and core library implementation.
+- Rust 1.95 for broker and core library implementation.
 - Python 3.10+ bindings through PyO3.
 - Java 25+ bindings through the FFM API.
 
@@ -10,7 +10,7 @@ JNI is not allowed for Java bindings.
 
 ## Rust
 
-Rust is the implementation language for Kerald's broker and core libraries. Repository build configuration should pin or document Rust 1.92 before Rust source is introduced.
+Rust is the implementation language for Kerald's broker and core libraries. Repository build configuration should pin or document Rust 1.95 before Rust source is introduced.
 
 New Rust crates may be added only when they are actively maintained at the time they are added and licensed under MIT or Apache-2.0.
 

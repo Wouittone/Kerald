@@ -1,0 +1,8 @@
+{
+  "cluster": {
+    "expected_brokers": 1
+  },
+  "inter_broker": {
+    "port": 9000
+  }
+}

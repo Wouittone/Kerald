@@ -6,7 +6,7 @@ Status: Proposed
 
 ADR 0001 defines Kerald's clustered coordination model: partitionless brokers, deterministic committed coordination state, and safety-first write admission whenever delivery guarantees cannot be proven.
 
-Kerald must now choose the concrete broker coordination subsystem that implements that model. In clustered mode, this subsystem is responsible for:
+Kerald must now choose the concrete broker coordination subsystem that implements that model. In multi-node operation, this subsystem is responsible for:
 
 - Maintaining a single, authoritative ordering of cluster metadata mutations.
 - Determining leadership and quorum health for admission control.
@@ -22,7 +22,7 @@ Kerald will implement broker coordination using a **TigerBeetle-style Viewstampe
 Decision boundary:
 
 - **In scope**
-  - Replication and agreement for cluster control-plane state, including membership, leader view, fencing epochs, admission state, and configuration changes.
+  - Replication and agreement for cluster control-plane state, including discovered voter membership, leader view, fencing epochs, admission state, and configuration changes.
   - Leader-based quorum protocol with deterministic state machine execution.
   - Safety-first ingress gating tied to quorum and replication health.
   - Timestamp-cursor compatibility for downstream delivery tracking without introducing offset semantics.
@@ -60,7 +60,7 @@ View change and recovery:
 4. Any operation committed in an earlier view must be preserved in the new view.
 5. Brokers that are behind replay committed state before they can participate in write admission.
 
-TigerBeetle-style implementation choices should emphasize static or explicitly reconfigured replica sets, deterministic execution, bounded resource usage, batched prepares, pipelined replication, durable writes before acknowledgement, and aggressive fencing of stale primaries. These choices are intended to keep the coordination path efficient while preserving safety-first admission under ambiguous failures.
+TigerBeetle-style implementation choices should emphasize deterministic voter discovery from inter-broker communication without configured peer-address lists, explicitly reconfigured expected broker counts, deterministic execution, bounded resource usage, batched prepares, pipelined replication, durable writes before acknowledgement, and aggressive fencing of stale primaries. These choices are intended to keep the coordination path efficient while preserving safety-first admission under ambiguous failures.
 
 ## Alternatives Considered
 
@@ -99,9 +99,9 @@ Negative consequences:
 
 ## Rollout or Migration Notes
 
-Standalone mode remains unchanged and does not require consensus.
+Single-node clusters have quorum 1 and do not require multi-node consensus.
 
-Cluster mode rollout should proceed behind a coordination feature flag while validation suites are expanded. Required follow-up artifacts:
+Multi-node coordination rollout should proceed behind a coordination feature flag while validation suites are expanded. Required follow-up artifacts:
 
 1. Architecture document for broker coordination message flow and state transitions.
 2. Integration tests for leader failover, quorum loss, stale-leader fencing, and recovery.

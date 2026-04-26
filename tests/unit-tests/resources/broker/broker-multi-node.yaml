@@ -1,0 +1,4 @@
+cluster:
+  expected_brokers: 3
+inter_broker:
+  port: 9002
