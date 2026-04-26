@@ -2,7 +2,7 @@
 
 Kerald tests are organized into separate suites so each change can be validated at the right level.
 
-- `unit/`: fine-grained module and function behavior.
+- `unit-tests/`: fine-grained module and function behavior.
 - `integration/`: cross-module behavior and broker subsystem interactions.
 - `performance/`: throughput, latency, and efficiency benchmarks.
 - `cucumber/`: externally observable behavior and acceptance scenarios.
