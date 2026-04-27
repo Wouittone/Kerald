@@ -37,7 +37,7 @@ async fn inter_broker_port(world: &mut BrokerWorld, port: u16) {
 #[when("the broker starts")]
 async fn broker_starts(world: &mut BrokerWorld) {
     let config = world.config.take().expect("scenario should configure broker before startup");
-    world.broker = Some(Broker::new(config).start());
+    world.broker = Some(Broker::new(config).start().await.expect("broker should start"));
 }
 
 #[then(expr = "the cluster quorum is {int}")]

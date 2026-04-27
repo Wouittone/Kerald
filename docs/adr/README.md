@@ -24,3 +24,4 @@ Number ADR files sequentially with a short kebab-case title, for example `0001-c
 
 - `0001-cluster-coordination.md`: Cluster coordination model, safety boundary, quorum behavior, and observability expectations.
 - `0002-broker-coordination-subsystem.md`: Default clustered broker coordination algorithm using TigerBeetle-style VSR.
+- `0003-async-broker-runtime.md`: Async-first broker lifecycle and runtime boundary.

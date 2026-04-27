@@ -10,4 +10,8 @@ Architecture documents should explain component boundaries, protocols, data flow
 - Write admission is safety-first.
 - Persistence is Lance read/write only behind OpenDAL-backed storage boundaries.
 
+Current architecture notes:
+
+- `broker-runtime.md`: Async-first broker lifecycle and runtime boundary.
+
 When an architecture document records a long-lived decision rather than explanatory context, add or update an ADR in `docs/adr/`.
