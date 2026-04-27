@@ -9,3 +9,8 @@ Requirements should describe observable commitments and constraints rather than 
 - Efficiency-first across CPU, memory, network, and storage while preserving strong performance.
 
 When a change affects public behavior, delivery guarantees, protocol compatibility, cursor semantics, storage boundaries, or runtime support, update or add a requirement document in this directory.
+
+Current requirement notes:
+
+- `cursor-semantics.md`: Client-visible nanosecond timestamp cursor requirements.
+- `topic-schemas.md`: Topic-declared Arrow schema requirements for payload ingress.

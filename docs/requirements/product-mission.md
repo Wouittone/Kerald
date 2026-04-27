@@ -11,7 +11,7 @@ Core product requirements:
 - Use nanosecond timestamp cursors for progress; do not use offset-based progress where timestamp cursors are required.
 - Apply TTL precedence in this order: cluster default, topic override, message override.
 - Use QUIC as the baseline protocol, with extension points for gRPC, Arrow ADBC, MQTT, and Kafka-compatible front doors.
-- Represent payloads with Arrow.
+- Represent payloads with Arrow, with topics referencing Lance table schemas before accepting Arrow messages.
 - Persist through Lance read/write boundaries only; brokers must not embed LanceDB query responsibilities.
 - Use OpenDAL for storage abstraction across local FS, S3, R2, GCS, and Azure Blob support paths.
 - Target Rust 1.95, Python 3.10+ bindings through PyO3, and Java 25+ bindings through the FFM API without JNI.

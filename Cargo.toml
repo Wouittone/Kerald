@@ -18,15 +18,29 @@ name = "unit_broker_modes"
 path = "tests/unit-tests/src/broker_modes.rs"
 
 [[test]]
+name = "unit_timestamp_cursors"
+path = "tests/unit-tests/src/timestamp_cursors.rs"
+
+[[test]]
 name = "integration_broker_startup"
 path = "tests/integration/broker_startup.rs"
+
+[[test]]
+name = "integration_cursor_polling"
+path = "tests/integration/cursor_polling.rs"
 
 [[test]]
 name = "cucumber_broker_modes"
 path = "tests/cucumber/broker_modes.rs"
 harness = false
 
+[[test]]
+name = "cucumber_timestamp_cursors"
+path = "tests/cucumber/timestamp_cursors.rs"
+harness = false
+
 [dependencies]
+arrow-schema = "58.1.0"
 clap = { version = "4.6.1", features = ["derive"] }
 config = { version = "0.15.22", default-features = false, features = ["toml", "json", "yaml"] }
 serde = { version = "1.0.228", features = ["derive"] }
