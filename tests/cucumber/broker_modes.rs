@@ -78,5 +78,5 @@ fn non_zero_port(port: u16) -> NonZeroU16 {
 
 #[tokio::main]
 async fn main() {
-    BrokerWorld::run("tests/cucumber/features").await;
+    BrokerWorld::run("tests/cucumber/features/broker_modes.feature").await;
 }

@@ -13,5 +13,8 @@ Architecture documents should explain component boundaries, protocols, data flow
 Current architecture notes:
 
 - `broker-runtime.md`: Async-first broker lifecycle and runtime boundary.
+- `cursor-semantics.md`: Nanosecond timestamp cursor model for client-visible progress.
+- `lancedb-persistence.md`: LanceDB/Lance persistence deployment assessment guardrails.
+- `topic-schemas.md`: Topic-declared Arrow schema boundary for payload ingress.
 
 When an architecture document records a long-lived decision rather than explanatory context, add or update an ADR in `docs/adr/`.
