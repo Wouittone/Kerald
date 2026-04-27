@@ -11,7 +11,8 @@ struct Cli {
     config: Option<PathBuf>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing();
 
     let cli = Cli::parse();
@@ -20,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => BrokerConfig::single_node(NonZeroU16::new(9000).expect("default inter-broker port is non-zero")),
     };
 
-    let broker = Broker::new(config).start();
+    let broker = Broker::new(config).start().await?;
     let cluster = broker.config().cluster();
 
     info!(

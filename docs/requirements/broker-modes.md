@@ -34,6 +34,10 @@ all cluster sizes: topics are partitionless, progress uses nanosecond timestamp
 cursors, and notification tracking remains independent from payload delivery
 tracking.
 
+Broker lifecycle APIs are async-first. Startup is fallible and awaited by the
+runtime owner so future QUIC, coordination, storage, polling, telemetry, and
+shutdown work can be initialized without blocking worker threads.
+
 ## Configuration Files
 
 Broker configuration is loaded through a parser that supports multiple

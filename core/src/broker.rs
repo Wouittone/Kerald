@@ -185,7 +185,7 @@ impl Broker {
         }
     }
 
-    pub fn start(self) -> RunningBroker {
+    pub async fn start(self) -> Result<RunningBroker, BrokerError> {
         let expected_brokers = self.config.cluster().expected_brokers();
         let quorum_size = self.config.cluster().quorum_size();
 
@@ -223,12 +223,12 @@ impl Broker {
             )
         };
 
-        RunningBroker {
+        Ok(RunningBroker {
             local_node_id: self.local_node_id,
             config: self.config,
             discovery_state,
             admission_state,
-        }
+        })
     }
 }
 
