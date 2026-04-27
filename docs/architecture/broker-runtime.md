@@ -4,7 +4,9 @@ Kerald's broker runtime is async-first for lifecycle and I/O-facing behavior.
 
 Synchronous APIs are appropriate for pure value construction, deterministic validation, and in-memory configuration helpers. Runtime APIs that may touch transport, storage, coordination, timers, telemetry export, subscriber polling, or graceful shutdown should be async and fallible.
 
-The broker binary owns the Tokio runtime. Library callers embed Kerald by awaiting broker lifecycle APIs inside their own runtime.
+The broker server process owns the Tokio runtime. Library callers embed Kerald by awaiting broker lifecycle APIs inside their own runtime.
+
+Operator CLI commands are distinct from the broker server process. They should perform finite control-plane operations by communicating with a running broker process to start, stop, inspect, or modify behavior.
 
 Runtime boundaries must preserve the mandatory architecture constraints:
 
@@ -14,4 +16,4 @@ Runtime boundaries must preserve the mandatory architecture constraints:
 - Write admission is safety-first and rejects ingress when delivery guarantees cannot be proven.
 - Persistence remains Lance read/write only behind OpenDAL-backed storage.
 
-As transport and persistence arrive, runtime components should use bounded queues, explicit backpressure, clear task ownership, OTel logs/metrics/traces, and graceful shutdown hooks. CPU-heavy Arrow work should not block async I/O progress; use batching or dedicated compute execution when needed.
+As transport and persistence arrive, runtime components should use bounded queues, explicit backpressure, clear task ownership, OTel logs/metrics/traces, protected control-plane execution, and graceful shutdown hooks. Arrow is the broker's in-memory exchange format; compute-heavy query, compaction, optimization, and analytics work belongs outside the broker process.

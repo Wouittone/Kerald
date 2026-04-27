@@ -12,7 +12,9 @@ This decision does not change Kerald's client-facing invariants: topics remain p
 
 ## Decision
 
-Kerald broker lifecycle APIs are async-first. `Broker::start` is an async, fallible boundary owned by the broker runtime. The CLI binary owns a Tokio multi-thread runtime through `#[tokio::main]`.
+Kerald broker lifecycle APIs are async-first. `Broker::start` is an async, fallible boundary owned by the broker server runtime. The long-running broker process owns a Tokio runtime through its server entrypoint.
+
+The operator CLI is a separate control surface. CLI operations should be finite commands that communicate with a running broker process to start, stop, inspect, or modify behavior. They must not become the long-running broker runtime merely because they perform control-plane work.
 
 Pure value construction and deterministic configuration parsing remain synchronous unless they perform I/O that benefits from async execution. Examples include `BrokerConfig::single_node`, quorum calculation, and validation of in-memory values.
 
@@ -21,8 +23,9 @@ Runtime implementation guidance:
 - Network transport, inter-broker discovery, coordination, storage, subscriber polling, timers, telemetry export, and graceful shutdown paths should use async APIs.
 - Broker startup should fail explicitly when required runtime resources cannot be initialized.
 - Background tasks must have explicit ownership and shutdown behavior rather than being detached without lifecycle control.
-- CPU-heavy Arrow work should be batched and isolated from async I/O progress when needed, for example through dedicated compute or blocking pools.
+- Brokers must treat Arrow as the in-memory exchange format, not as permission to perform compute-heavy query, compaction, optimization, or analytics work inside the broker process. Those workloads belong in dedicated modules or external systems.
 - Backpressure should be explicit through bounded queues, admission state, and resource limits.
+- High-priority control paths, including shutdown hooks, should have protected execution capacity through distinct task supervisors, queues, or Tokio execution pools so they remain responsive under data-plane load.
 
 ## Alternatives Considered
 
@@ -30,7 +33,7 @@ Keeping broker lifecycle synchronous until the first concrete async transport wa
 
 Adding sync and async startup variants was rejected because it creates two lifecycle surfaces for a broker that is fundamentally I/O-oriented.
 
-Using one thread per connection or operation was rejected because it conflicts with Kerald's efficiency-first mission and would not scale cleanly for QUIC streams, subscriber polling, storage calls, and coordination traffic.
+Using one thread per connection or operation was rejected because it conflicts with Kerald's efficiency-first mission and would not scale cleanly for QUIC streams, subscriber polling, storage calls, and coordination traffic. This rejection does not preclude distinct async execution pools for control-plane priority or shutdown responsiveness.
 
 ## Consequences
 
@@ -40,15 +43,16 @@ Positive consequences:
 - QUIC, OpenDAL, coordination, polling, timers, and telemetry can compose without blocking runtime worker threads.
 - Runtime startup failures can be propagated before a broker is considered running.
 - Future task ownership and graceful shutdown work has a clear API boundary.
+- Control-plane operations can be designed as finite CLI commands against a running process instead of being conflated with the long-running broker runtime.
 
 Negative consequences:
 
 - Tests and embedding code must run inside an async runtime.
-- The binary depends on Tokio before the first concrete transport task lands.
+- The broker server binary depends on Tokio before the first concrete transport task lands.
 - Purely synchronous bootstrap code now uses an async call even when no await point is currently needed internally.
 
 ## Rollout or Migration Notes
 
-The initial rollout converts `Broker::start` to `async fn start(self) -> Result<RunningBroker, BrokerError>` and updates the CLI, integration tests, and behavior tests to await startup.
+The initial rollout converts `Broker::start` to `async fn start(self) -> Result<RunningBroker, BrokerError>` and updates the broker server entrypoint, integration tests, and behavior tests to await startup.
 
-Follow-up work should add explicit task supervision and graceful shutdown once transport, discovery, coordination, or storage tasks are introduced. Behavior and integration suites should cover startup failure, shutdown, admission rejection under runtime failures, and preservation of partitionless timestamp-cursor semantics.
+Follow-up work should add explicit task supervision, protected control-plane execution, and graceful shutdown once transport, discovery, coordination, or storage tasks are introduced. Behavior and integration suites should cover startup failure, shutdown, admission rejection under runtime failures, and preservation of partitionless timestamp-cursor semantics.
