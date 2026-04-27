@@ -14,12 +14,12 @@ work grows APIs around a different progress representation.
 
 ## Decision
 
-Represent client-visible progress with Arrow's native signed 64-bit nanosecond
-timestamp value and Arrow's timestamp datatype:
-`DataType::Timestamp(TimeUnit::Nanosecond, None)`. Kerald exposes a
-`TimestampCursor` type alias for that scalar rather than a custom cursor
-wrapper. Cursor ordering is timestamp ordering. Bounded polling uses validated
-inclusive standard ranges.
+Represent client-visible progress with Arrow's base timestamp-nanosecond native
+type: `<TimestampNanosecondType as ArrowPrimitiveType>::Native`, paired with
+Arrow's timestamp datatype: `DataType::Timestamp(TimeUnit::Nanosecond, None)`.
+Kerald exposes `TimestampCursor` as a direct alias of that Arrow native scalar
+rather than a custom cursor wrapper. Cursor ordering is timestamp ordering.
+Bounded polling uses validated inclusive standard ranges.
 
 Creating a cursor rejects Arrow timestamp values before the Unix epoch. The
 cursor API does not expose partition or offset concepts, and it does not convert
@@ -66,6 +66,6 @@ Negative:
 
 This is the first cursor API, so no migration is required. Future subscriber,
 protocol, and persistence changes should reuse the Arrow timestamp-nanosecond
-cursor scalar for client-visible progress and keep any physical addressing internal. Topic
-payload work should pair Arrow message ingress with topic-declared schemas, as
-recorded in ADR 0005.
+cursor scalar for client-visible progress and keep any physical addressing
+internal. Topic payload work should pair Arrow message ingress with
+topic-declared schemas, as recorded in ADR 0005.

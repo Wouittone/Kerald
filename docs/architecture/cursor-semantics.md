@@ -1,7 +1,8 @@
 # Cursor Semantics
 
 Kerald uses nanosecond timestamp cursors for client-visible progress. A cursor
-is Arrow's native signed 64-bit timestamp-nanosecond value, described by
+is a direct alias of Arrow's timestamp-nanosecond native scalar,
+`<TimestampNanosecondType as ArrowPrimitiveType>::Native`, described by
 `DataType::Timestamp(TimeUnit::Nanosecond, None)` and represented to clients as
 nanoseconds since the Unix epoch. It is ordered only by timestamp value and does
 not imply partition ownership, broker-local sequence ownership, or storage
