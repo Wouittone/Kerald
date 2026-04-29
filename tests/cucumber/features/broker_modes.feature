@@ -15,3 +15,21 @@ Feature: Broker cluster startup
     Then a broker UUID is generated
     Then the cluster quorum is 2
     And write admission is rejected until voter discovery reaches quorum
+
+  Scenario: Single-node cluster keeps a configured inter-broker port
+    Given a broker is configured for a single-node cluster
+    And the inter-broker port is 9010
+    When the broker starts
+    Then the cluster quorum is 1
+    And the running broker inter-broker port is 9010
+    And write admission is enabled for local operation
+
+  Scenario: Broker configuration rejects an invalid inter-broker port
+    Given a broker configuration file declares inter-broker port zero
+    When the broker configuration is loaded
+    Then the broker configuration is rejected as invalid
+
+  Scenario: Broker configuration rejects an invalid expected cluster size
+    Given a broker configuration file declares expected cluster size zero
+    When the broker configuration is loaded
+    Then the broker configuration is rejected as invalid

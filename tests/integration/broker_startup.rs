@@ -1,5 +1,7 @@
-use kerald::{AdmissionState, Broker, BrokerConfig, COORDINATION_QUORUM_NOT_DISCOVERED, ClusterConfig, DiscoveryState, InterBrokerConfig};
+use kerald::{AdmissionState, Broker, BrokerConfig, ClusterConfig, DiscoveryState, InterBrokerConfig};
 use std::num::{NonZeroU16, NonZeroUsize};
+
+const COORDINATION_QUORUM_NOT_DISCOVERED: &str = "cluster coordination has not discovered a voting quorum";
 
 fn port(value: u16) -> NonZeroU16 {
     NonZeroU16::new(value).expect("test port should be non-zero")
@@ -15,6 +17,7 @@ async fn single_node_cluster_starts_with_generated_identity_and_local_admission_
     assert_ne!(broker.local_node_id().as_uuid(), uuid::Uuid::nil());
     assert_eq!(broker.config().cluster().expected_brokers().get(), 1);
     assert_eq!(broker.config().cluster().quorum_size().get(), 1);
+    assert_eq!(broker.config().inter_broker().port().get(), 9000);
     assert_eq!(
         broker.discovery_state(),
         &DiscoveryState::Complete {
@@ -22,6 +25,24 @@ async fn single_node_cluster_starts_with_generated_identity_and_local_admission_
         }
     );
     assert_eq!(broker.admission_state(), &AdmissionState::AcceptingSingleNodeCluster);
+    assert!(broker.admission_state().admits_writes());
+}
+
+#[tokio::test]
+async fn single_node_cluster_preserves_configured_inter_broker_port_at_startup() {
+    let broker = Broker::new(BrokerConfig::single_node(port(9010)))
+        .start()
+        .await
+        .expect("single-node broker should start with configured inter-broker port");
+
+    assert_eq!(broker.config().cluster().quorum_size().get(), 1);
+    assert_eq!(broker.config().inter_broker().port().get(), 9010);
+    assert_eq!(
+        broker.discovery_state(),
+        &DiscoveryState::Complete {
+            discovered_voters: NonZeroUsize::MIN
+        }
+    );
     assert!(broker.admission_state().admits_writes());
 }
 
@@ -38,6 +59,7 @@ async fn multi_node_cluster_discovers_only_local_voter_at_startup_and_rejects_wr
     assert_ne!(broker.local_node_id().as_uuid(), uuid::Uuid::nil());
     assert_eq!(broker.config().cluster().expected_brokers().get(), 3);
     assert_eq!(broker.config().cluster().quorum_size().get(), 2);
+    assert_eq!(broker.config().inter_broker().port().get(), 9000);
     assert_eq!(
         broker.discovery_state(),
         &DiscoveryState::Discovering {

@@ -26,6 +26,10 @@ expected_brokers = 3
 port = 9000
 ```
 
+Configuration values are validated before startup. For example,
+`expected_brokers = 0` or an inter-broker port of `0` is rejected as invalid
+configuration instead of being replaced with the development default.
+
 Broker IDs are generated automatically. Peer addresses are not configured
 explicitly; brokers discover each other dynamically through inter-broker
 communication on the configured port.
