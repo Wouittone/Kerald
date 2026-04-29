@@ -1,10 +1,13 @@
-use kerald::{
-    BrokerConfig, BrokerError, BrokerNodeId, COORDINATION_QUORUM_NOT_DISCOVERED, ClusterConfig, INVALID_BROKER_NODE_UUID, InterBrokerConfig,
-};
+use kerald::{BrokerConfig, BrokerError, BrokerNodeId, ClusterConfig, InterBrokerConfig};
 use std::{
     num::{NonZeroU16, NonZeroUsize},
     path::PathBuf,
 };
+
+const CONFIG_LOAD_FAILED: &str = "configuration file could not be loaded";
+const COORDINATION_QUORUM_NOT_DISCOVERED: &str = "cluster coordination has not discovered a voting quorum";
+const INVALID_BROKER_CONFIG: &str = "broker configuration values are invalid";
+const INVALID_BROKER_NODE_UUID: &str = "broker node id must be a UUID";
 
 fn cluster_size(size: usize) -> NonZeroUsize {
     NonZeroUsize::new(size).expect("test cluster size should be non-zero")
@@ -73,6 +76,28 @@ fn broker_config_loads_from_yaml_resource() {
 
     assert_eq!(config.cluster().expected_brokers().get(), 3);
     assert_eq!(config.inter_broker().port().get(), 9002);
+}
+
+#[test]
+fn broker_config_reports_missing_file_as_load_failure() {
+    let error = BrokerConfig::from_path(resource_path("missing.toml")).expect_err("missing config should fail to load");
+
+    assert_eq!(error, BrokerError::ConfigLoad(CONFIG_LOAD_FAILED));
+}
+
+#[test]
+fn broker_config_rejects_zero_expected_brokers() {
+    let error = BrokerConfig::from_path(resource_path("broker-zero-expected-brokers.json"))
+        .expect_err("zero expected broker count should be invalid");
+
+    assert_eq!(error, BrokerError::InvalidConfig(INVALID_BROKER_CONFIG));
+}
+
+#[test]
+fn broker_config_rejects_zero_inter_broker_port() {
+    let error = BrokerConfig::from_path(resource_path("broker-zero-port.json")).expect_err("port zero should be invalid");
+
+    assert_eq!(error, BrokerError::InvalidConfig(INVALID_BROKER_CONFIG));
 }
 
 #[test]
