@@ -1,3 +1,6 @@
+use crate::broker_error_messages::{
+    CONFIG_LOAD_FAILED, COORDINATION_QUORUM_NOT_DISCOVERED, INVALID_BROKER_CONFIG, INVALID_BROKER_NODE_UUID,
+};
 use serde::Deserialize;
 use std::{
     num::{NonZeroU16, NonZeroUsize},
@@ -6,10 +9,6 @@ use std::{
 use thiserror::Error;
 use tracing::{info, warn};
 use uuid::Uuid;
-
-pub const CONFIG_LOAD_FAILED: &str = "configuration file could not be loaded or deserialized";
-pub const COORDINATION_QUORUM_NOT_DISCOVERED: &str = "cluster coordination has not discovered a voting quorum";
-pub const INVALID_BROKER_NODE_UUID: &str = "broker node id must be a UUID";
 
 /// Durable identity for a broker process.
 ///
@@ -118,7 +117,7 @@ impl BrokerConfig {
             .build()
             .map_err(|_| BrokerError::ConfigLoad(CONFIG_LOAD_FAILED))?
             .try_deserialize::<Self>()
-            .map_err(|_| BrokerError::ConfigLoad(CONFIG_LOAD_FAILED))
+            .map_err(|_| BrokerError::InvalidConfig(INVALID_BROKER_CONFIG))
     }
 
     pub fn cluster(&self) -> &ClusterConfig {
