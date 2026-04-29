@@ -27,6 +27,7 @@ path = "tests/cucumber/broker_modes.rs"
 harness = false
 
 [dependencies]
+arrow-schema = "58.1.0"
 clap = { version = "4.6.1", features = ["derive"] }
 config = { version = "0.15.22", default-features = false, features = ["toml", "json", "yaml"] }
 serde = { version = "1.0.228", features = ["derive"] }

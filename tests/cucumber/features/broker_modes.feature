@@ -33,3 +33,9 @@ Feature: Broker cluster startup
     Given a broker configuration file declares expected cluster size zero
     When the broker configuration is loaded
     Then the broker configuration is rejected as invalid
+
+  Scenario: Topic declaration is partitionless
+    Given a client requests topic "orders.received"
+    Then the topic name is "orders.received"
+    And the topic Arrow schema contains field "order_id"
+    And no partition input is required

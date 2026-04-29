@@ -1,5 +1,9 @@
-use kerald::{AdmissionState, Broker, BrokerConfig, ClusterConfig, DiscoveryState, InterBrokerConfig};
-use std::num::{NonZeroU16, NonZeroUsize};
+use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use kerald::{AdmissionState, Broker, BrokerConfig, ClusterConfig, DiscoveryState, InterBrokerConfig, TopicDefinition};
+use std::{
+    num::{NonZeroU16, NonZeroUsize},
+    sync::Arc,
+};
 
 const COORDINATION_QUORUM_NOT_DISCOVERED: &str = "cluster coordination has not discovered a voting quorum";
 
@@ -74,4 +78,32 @@ async fn multi_node_cluster_discovers_only_local_voter_at_startup_and_rejects_wr
         }
     );
     assert!(!broker.admission_state().admits_writes());
+}
+
+#[tokio::test]
+async fn partitionless_topic_metadata_is_independent_of_cluster_size() {
+    let single_node = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("single-node broker should start");
+    let multi_node = Broker::new(BrokerConfig::new(
+        ClusterConfig::new(NonZeroUsize::new(3).expect("cluster size should be non-zero")),
+        InterBrokerConfig::new(port(9001)),
+    ))
+    .start()
+    .await
+    .expect("multi-node broker should start");
+
+    let topic = TopicDefinition::new("orders.received", order_schema()).expect("topic definition should be valid");
+
+    assert_eq!(topic.name().as_str(), "orders.received");
+    assert_eq!(topic.schema().field(0).name(), "order_id");
+    assert!(single_node.config().cluster().is_single_node());
+    assert!(!multi_node.config().cluster().is_single_node());
+    assert!(single_node.admission_state().admits_writes());
+    assert!(!multi_node.admission_state().admits_writes());
+}
+
+fn order_schema() -> SchemaRef {
+    Arc::new(Schema::new(vec![Field::new("order_id", DataType::Utf8, false)]))
 }

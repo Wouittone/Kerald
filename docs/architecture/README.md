@@ -13,5 +13,6 @@ Architecture documents should explain component boundaries, protocols, data flow
 Current architecture notes:
 
 - `broker-runtime.md`: Async-first broker lifecycle and runtime boundary.
+- `topics.md`: Partitionless topic metadata, Arrow schema, and public model boundary.
 
 When an architecture document records a long-lived decision rather than explanatory context, add or update an ADR in `docs/adr/`.

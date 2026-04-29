@@ -1,8 +1,12 @@
+use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use cucumber::{World, given, then, when};
-use kerald::{AdmissionState, Broker, BrokerConfig, BrokerError, ClusterConfig, DiscoveryState, InterBrokerConfig};
+use kerald::{
+    AdmissionState, Broker, BrokerConfig, BrokerError, ClusterConfig, DiscoveryState, InterBrokerConfig, TopicDefinition, TopicError,
+};
 use std::{
     num::{NonZeroU16, NonZeroUsize},
     path::PathBuf,
+    sync::Arc,
 };
 
 const INVALID_BROKER_CONFIG: &str = "broker configuration values are invalid";
@@ -13,6 +17,8 @@ struct BrokerWorld {
     config_error: Option<BrokerError>,
     config_path: Option<PathBuf>,
     broker: Option<kerald::RunningBroker>,
+    topic: Option<TopicDefinition>,
+    topic_error: Option<TopicError>,
 }
 
 #[given("a broker is configured for a single-node cluster")]
@@ -49,6 +55,14 @@ async fn zero_port_config_file(world: &mut BrokerWorld) {
 #[given("a broker configuration file declares expected cluster size zero")]
 async fn zero_expected_brokers_config_file(world: &mut BrokerWorld) {
     world.config_path = Some(cucumber_resource_path("broker-zero-expected-brokers.json"));
+}
+
+#[given(expr = "a client requests topic {string}")]
+async fn client_requests_topic(world: &mut BrokerWorld, topic_name: String) {
+    match TopicDefinition::new(topic_name, order_schema()) {
+        Ok(topic) => world.topic = Some(topic),
+        Err(error) => world.topic_error = Some(error),
+    }
 }
 
 #[when("the broker starts")]
@@ -111,6 +125,27 @@ async fn write_admission_rejected_until_discovery_quorum(world: &mut BrokerWorld
     );
 }
 
+#[then(expr = "the topic name is {string}")]
+async fn topic_name_is(world: &mut BrokerWorld, topic_name: String) {
+    let topic = world.topic.as_ref().expect("topic should be defined");
+
+    assert_eq!(topic.name().as_str(), topic_name);
+    assert_eq!(world.topic_error, None);
+}
+
+#[then("no partition input is required")]
+async fn no_partition_input_required(world: &mut BrokerWorld) {
+    assert!(world.topic.is_some());
+    assert_eq!(world.topic_error, None);
+}
+
+#[then(expr = "the topic Arrow schema contains field {string}")]
+async fn topic_schema_contains_field(world: &mut BrokerWorld, field_name: String) {
+    let topic = world.topic.as_ref().expect("topic should be defined");
+
+    assert!(topic.schema().fields().iter().any(|field| field.name() == &field_name));
+}
+
 fn non_zero_port(port: u16) -> NonZeroU16 {
     NonZeroU16::new(port).expect("scenario port should be non-zero")
 }
@@ -121,6 +156,10 @@ fn cucumber_resource_path(name: &str) -> PathBuf {
         .join("cucumber")
         .join("resources")
         .join(name)
+}
+
+fn order_schema() -> SchemaRef {
+    Arc::new(Schema::new(vec![Field::new("order_id", DataType::Utf8, false)]))
 }
 
 #[tokio::main]
