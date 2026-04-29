@@ -16,6 +16,8 @@ The topic model must preserve Kerald's core guarantees:
   offset-like partition positions.
 - Subscriber notification tracking remains independent from payload delivery
   tracking.
+- Accepted messages for a topic must advance the topic timestamp cursor so
+  subscribers can poll by nanosecond timestamp without offset semantics.
 
 Topic names are operator and client visible identifiers. The initial name rules
 are intentionally simple and portable:

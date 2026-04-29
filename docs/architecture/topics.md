@@ -13,11 +13,18 @@ progress semantics.
 Current implementation boundary:
 
 - `TopicName` is a `String` alias for the user-visible topic identifier.
+- `TimestampNs` is an `i64` alias for nanosecond timestamp cursors.
+- `MessagePayload` is an Arrow `RecordBatch` alias; the broker accepts Arrow
+  batches directly instead of wrapping payloads in a one-field type.
 - `parse_topic_name` validates and trims topic names at construction boundaries.
 - `TopicDefinition` stores topic name and Arrow `SchemaRef` metadata directly.
-- Broker write routing, durable topic catalog storage, Arrow payload handling,
-  timestamp cursors, notification tracking, and payload delivery are future
-  slices.
+- A running single-node broker can declare a topic, accept a schema-matching
+  Arrow payload, return a notification timestamp, and let subscribers poll
+  notifications and payload batches independently by timestamp cursor.
+- Multi-node brokers continue to reject writes until coordination can prove
+  quorum safety.
+- Durable topic catalog storage, Lance persistence, OpenDAL-backed object
+  storage, protocol front doors, and replicated write routing are future slices.
 
 The topic model intentionally keeps indirection low. Thin wrappers are avoided
 when a standard Rust or Arrow type already describes the data accurately.

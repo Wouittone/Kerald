@@ -1,3 +1,4 @@
+use arrow_array::{RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use kerald::{AdmissionState, Broker, BrokerConfig, ClusterConfig, DiscoveryState, InterBrokerConfig, TopicDefinition};
 use std::{
@@ -104,6 +105,39 @@ async fn partitionless_topic_metadata_is_independent_of_cluster_size() {
     assert!(!multi_node.admission_state().admits_writes());
 }
 
+#[tokio::test]
+async fn single_node_broker_accepts_a_message_and_exposes_notification_and_payload_progress_independently() {
+    let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("single-node broker should start");
+    let topic = TopicDefinition::new("orders.received", order_schema()).expect("topic definition should be valid");
+    broker.declare_topic(topic).expect("topic declaration should succeed");
+
+    let notification = broker
+        .publish("orders.received", 1_700_000_000_000_000_000, order_payload("order-1"))
+        .expect("single-node broker should accept the message");
+
+    assert_eq!(notification.topic().as_str(), "orders.received");
+    assert_eq!(notification.timestamp_ns(), 1_700_000_000_000_000_000);
+    assert_eq!(notification.row_count(), 1);
+
+    let notifications = broker
+        .notifications_since("orders.received", 0)
+        .expect("notification polling should succeed");
+    let payloads = broker.payloads_since("orders.received", 0).expect("payload polling should succeed");
+
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(payloads.len(), 1);
+    assert_eq!(payloads[0].num_rows(), 1);
+    assert_eq!(payloads[0].schema().field(0).name(), "order_id");
+}
+
 fn order_schema() -> SchemaRef {
     Arc::new(Schema::new(vec![Field::new("order_id", DataType::Utf8, false)]))
+}
+
+fn order_payload(order_id: &str) -> RecordBatch {
+    RecordBatch::try_new(order_schema(), vec![Arc::new(StringArray::from(vec![order_id])) as _])
+        .expect("test payload should be a valid Arrow record batch")
 }

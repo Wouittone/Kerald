@@ -1,7 +1,8 @@
+use arrow_array::{RecordBatch, StringArray, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use kerald::{
-    BrokerConfig, BrokerError, BrokerNodeId, ClusterConfig, InterBrokerConfig, TOPIC_NAME_MAX_LEN_BYTES, TopicDefinition, TopicError,
-    parse_topic_name,
+    Broker, BrokerConfig, BrokerError, BrokerNodeId, ClusterConfig, InterBrokerConfig, MessageNotification, TOPIC_NAME_MAX_LEN_BYTES,
+    TopicDefinition, TopicError, parse_topic_name,
 };
 use std::{
     num::{NonZeroU16, NonZeroUsize},
@@ -13,6 +14,11 @@ const CONFIG_LOAD_FAILED: &str = "configuration file could not be loaded";
 const COORDINATION_QUORUM_NOT_DISCOVERED: &str = "cluster coordination has not discovered a voting quorum";
 const INVALID_BROKER_CONFIG: &str = "broker configuration values are invalid";
 const INVALID_BROKER_NODE_UUID: &str = "broker node id must be a UUID";
+const MESSAGE_TIMESTAMP_NOT_ADVANCING: &str = "message timestamp must advance beyond the topic cursor";
+const PAYLOAD_SCHEMA_MISMATCH: &str = "message payload schema does not match the topic schema";
+const TOPIC_ALREADY_EXISTS: &str = "topic already exists";
+const UNKNOWN_TOPIC: &str = "topic does not exist";
+const WRITE_ADMISSION_REJECTED: &str = "write admission is not enabled";
 const EMPTY_TOPIC_NAME: &str = "topic name must not be empty";
 const INVALID_TOPIC_NAME_CHARACTER: &str = "topic name must contain only ASCII letters, numbers, dots, underscores, or hyphens";
 const TOPIC_NAME_TOO_LONG: &str = "topic name must be at most 255 bytes";
@@ -116,6 +122,15 @@ fn rejecting_coordination_uses_static_reason() {
 }
 
 #[test]
+fn message_notification_uses_topic_timestamp_and_row_count_directly() {
+    let notification = MessageNotification::new("orders.received".to_owned(), 1_700_000_000_000_000_000, 2);
+
+    assert_eq!(notification.topic().as_str(), "orders.received");
+    assert_eq!(notification.timestamp_ns(), 1_700_000_000_000_000_000);
+    assert_eq!(notification.row_count(), 2);
+}
+
+#[test]
 fn topic_names_are_trimmed_and_validated() {
     let name = parse_topic_name(" orders.received_v1 ").expect("topic name should be valid");
 
@@ -166,6 +181,110 @@ fn topic_definition_carries_arrow_schema_metadata() {
     );
 }
 
+#[tokio::test]
+async fn duplicate_topic_declarations_are_rejected() {
+    let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("broker should start");
+    broker
+        .declare_topic(TopicDefinition::new("orders.received", order_schema()).expect("topic should be valid"))
+        .expect("first declaration should succeed");
+
+    let error = broker
+        .declare_topic(TopicDefinition::new("orders.received", order_schema()).expect("topic should be valid"))
+        .expect_err("duplicate topic should be rejected");
+
+    assert_eq!(error, BrokerError::TopicAlreadyExists(TOPIC_ALREADY_EXISTS));
+}
+
+#[tokio::test]
+async fn publishing_rejects_unknown_topics() {
+    let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("broker should start");
+
+    let error = broker
+        .publish(
+            "orders.received",
+            1_700_000_000_000_000_000,
+            order_payload("order-1", 1_700_000_000_000_000_000),
+        )
+        .expect_err("unknown topic should be rejected");
+
+    assert_eq!(error, BrokerError::UnknownTopic(UNKNOWN_TOPIC));
+}
+
+#[tokio::test]
+async fn publishing_rejects_schema_mismatches() {
+    let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("broker should start");
+    broker
+        .declare_topic(TopicDefinition::new("orders.received", order_schema()).expect("topic should be valid"))
+        .expect("topic declaration should succeed");
+
+    let error = broker
+        .publish("orders.received", 1_700_000_000_000_000_000, wrong_schema_payload())
+        .expect_err("schema mismatch should be rejected");
+
+    assert_eq!(error, BrokerError::PayloadSchemaMismatch(PAYLOAD_SCHEMA_MISMATCH));
+}
+
+#[tokio::test]
+async fn publishing_rejects_non_advancing_timestamps() {
+    let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("broker should start");
+    broker
+        .declare_topic(TopicDefinition::new("orders.received", order_schema()).expect("topic should be valid"))
+        .expect("topic declaration should succeed");
+    broker
+        .publish(
+            "orders.received",
+            1_700_000_000_000_000_000,
+            order_payload("order-1", 1_700_000_000_000_000_000),
+        )
+        .expect("first message should be accepted");
+
+    let error = broker
+        .publish(
+            "orders.received",
+            1_700_000_000_000_000_000,
+            order_payload("order-2", 1_700_000_000_000_000_000),
+        )
+        .expect_err("duplicate timestamp should be rejected");
+
+    assert_eq!(error, BrokerError::MessageTimestampNotAdvancing(MESSAGE_TIMESTAMP_NOT_ADVANCING));
+}
+
+#[tokio::test]
+async fn multi_node_broker_rejects_publish_until_write_admission_is_enabled() {
+    let mut broker = Broker::new(BrokerConfig::new(
+        ClusterConfig::new(cluster_size(3)),
+        InterBrokerConfig::new(port(9000)),
+    ))
+    .start()
+    .await
+    .expect("broker should start");
+    broker
+        .declare_topic(TopicDefinition::new("orders.received", order_schema()).expect("topic should be valid"))
+        .expect("topic declaration should succeed");
+
+    let error = broker
+        .publish(
+            "orders.received",
+            1_700_000_000_000_000_000,
+            order_payload("order-1", 1_700_000_000_000_000_000),
+        )
+        .expect_err("publish should be rejected without admission");
+
+    assert_eq!(error, BrokerError::WriteAdmissionRejected(WRITE_ADMISSION_REJECTED));
+}
+
 fn resource_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -184,4 +303,22 @@ fn order_schema() -> SchemaRef {
             false,
         ),
     ]))
+}
+
+fn order_payload(order_id: &str, received_at_ns: i64) -> RecordBatch {
+    RecordBatch::try_new(
+        order_schema(),
+        vec![
+            Arc::new(StringArray::from(vec![order_id])) as _,
+            Arc::new(TimestampNanosecondArray::from(vec![received_at_ns])) as _,
+        ],
+    )
+    .expect("test payload should be a valid Arrow record batch")
+}
+
+fn wrong_schema_payload() -> RecordBatch {
+    let schema = Arc::new(Schema::new(vec![Field::new("customer_id", DataType::Utf8, false)]));
+
+    RecordBatch::try_new(schema, vec![Arc::new(StringArray::from(vec!["customer-1"])) as _])
+        .expect("test payload should be a valid Arrow record batch")
 }

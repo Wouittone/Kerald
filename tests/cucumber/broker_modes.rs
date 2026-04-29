@@ -1,7 +1,9 @@
+use arrow_array::{RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use cucumber::{World, given, then, when};
 use kerald::{
-    AdmissionState, Broker, BrokerConfig, BrokerError, ClusterConfig, DiscoveryState, InterBrokerConfig, TopicDefinition, TopicError,
+    AdmissionState, Broker, BrokerConfig, BrokerError, ClusterConfig, DiscoveryState, InterBrokerConfig, MessageNotification,
+    TopicDefinition, TopicError,
 };
 use std::{
     num::{NonZeroU16, NonZeroUsize},
@@ -19,6 +21,9 @@ struct BrokerWorld {
     broker: Option<kerald::RunningBroker>,
     topic: Option<TopicDefinition>,
     topic_error: Option<TopicError>,
+    notification: Option<MessageNotification>,
+    notifications: Vec<MessageNotification>,
+    payloads: Vec<RecordBatch>,
 }
 
 #[given("a broker is configured for a single-node cluster")]
@@ -65,6 +70,23 @@ async fn client_requests_topic(world: &mut BrokerWorld, topic_name: String) {
     }
 }
 
+#[given(expr = "topic {string} exists")]
+async fn topic_exists(world: &mut BrokerWorld, topic_name: String) {
+    declare_topic(world, topic_name);
+}
+
+#[when(expr = "topic {string} exists")]
+async fn topic_exists_after_startup(world: &mut BrokerWorld, topic_name: String) {
+    declare_topic(world, topic_name);
+}
+
+fn declare_topic(world: &mut BrokerWorld, topic_name: String) {
+    let broker = world.broker.as_mut().expect("broker should be started before declaring a topic");
+    let topic = TopicDefinition::new(topic_name, order_schema()).expect("scenario topic should be valid");
+
+    broker.declare_topic(topic).expect("topic declaration should succeed");
+}
+
 #[when("the broker starts")]
 async fn broker_starts(world: &mut BrokerWorld) {
     let config = world.config.take().expect("scenario should configure broker before startup");
@@ -79,6 +101,27 @@ async fn broker_config_loads(world: &mut BrokerWorld) {
         Ok(config) => world.config = Some(config),
         Err(error) => world.config_error = Some(error),
     }
+}
+
+#[when(expr = "a client publishes order {string} at timestamp {int}")]
+async fn client_publishes_order(world: &mut BrokerWorld, order_id: String, timestamp_ns: i64) {
+    let broker = world.broker.as_mut().expect("broker should be started before publishing");
+    world.notification = Some(
+        broker
+            .publish("orders.received", timestamp_ns, order_payload(&order_id))
+            .expect("message publish should be accepted"),
+    );
+}
+
+#[when(expr = "a subscriber polls topic {string} after timestamp {int}")]
+async fn subscriber_polls_topic(world: &mut BrokerWorld, topic_name: String, after_timestamp_ns: i64) {
+    let broker = world.broker.as_ref().expect("broker should be started before polling");
+    world.notifications = broker
+        .notifications_since(&topic_name, after_timestamp_ns)
+        .expect("notification polling should succeed");
+    world.payloads = broker
+        .payloads_since(&topic_name, after_timestamp_ns)
+        .expect("payload polling should succeed");
 }
 
 #[then(expr = "the cluster quorum is {int}")]
@@ -146,6 +189,25 @@ async fn topic_schema_contains_field(world: &mut BrokerWorld, field_name: String
     assert!(topic.schema().fields().iter().any(|field| field.name() == &field_name));
 }
 
+#[then(expr = "the accepted message notification timestamp is {int}")]
+async fn accepted_notification_timestamp_is(world: &mut BrokerWorld, timestamp_ns: i64) {
+    let notification = world.notification.as_ref().expect("publish should return a notification");
+
+    assert_eq!(notification.topic().as_str(), "orders.received");
+    assert_eq!(notification.timestamp_ns(), timestamp_ns);
+}
+
+#[then(expr = "the subscriber sees {int} notification")]
+async fn subscriber_sees_notification_count(world: &mut BrokerWorld, notification_count: usize) {
+    assert_eq!(world.notifications.len(), notification_count);
+}
+
+#[then(expr = "the subscriber receives {int} Arrow payload batch")]
+async fn subscriber_receives_payload_batch_count(world: &mut BrokerWorld, payload_count: usize) {
+    assert_eq!(world.payloads.len(), payload_count);
+    assert!(world.payloads.iter().all(|payload| payload.schema().field(0).name() == "order_id"));
+}
+
 fn non_zero_port(port: u16) -> NonZeroU16 {
     NonZeroU16::new(port).expect("scenario port should be non-zero")
 }
@@ -160,6 +222,11 @@ fn cucumber_resource_path(name: &str) -> PathBuf {
 
 fn order_schema() -> SchemaRef {
     Arc::new(Schema::new(vec![Field::new("order_id", DataType::Utf8, false)]))
+}
+
+fn order_payload(order_id: &str) -> RecordBatch {
+    RecordBatch::try_new(order_schema(), vec![Arc::new(StringArray::from(vec![order_id])) as _])
+        .expect("scenario payload should be a valid Arrow record batch")
 }
 
 #[tokio::main]

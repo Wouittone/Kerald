@@ -1,8 +1,11 @@
 use crate::broker_error_messages::{
     CONFIG_LOAD_FAILED, COORDINATION_QUORUM_NOT_DISCOVERED, INVALID_BROKER_CONFIG, INVALID_BROKER_NODE_UUID,
+    MESSAGE_TIMESTAMP_NOT_ADVANCING, PAYLOAD_SCHEMA_MISMATCH, TOPIC_ALREADY_EXISTS, UNKNOWN_TOPIC, WRITE_ADMISSION_REJECTED,
 };
+use crate::topic::{MessageNotification, MessagePayload, TimestampNs, TopicDefinition, TopicName};
 use serde::Deserialize;
 use std::{
+    collections::HashMap,
     num::{NonZeroU16, NonZeroUsize},
     path::Path,
 };
@@ -227,17 +230,31 @@ impl Broker {
             config: self.config,
             discovery_state,
             admission_state,
+            topics: HashMap::new(),
         })
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct StoredMessage {
+    timestamp_ns: TimestampNs,
+    payload: MessagePayload,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct TopicLog {
+    definition: TopicDefinition,
+    messages: Vec<StoredMessage>,
+}
+
 /// Broker process after startup validation and initial discovery evaluation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RunningBroker {
     local_node_id: BrokerNodeId,
     config: BrokerConfig,
     discovery_state: DiscoveryState,
     admission_state: AdmissionState,
+    topics: HashMap<TopicName, TopicLog>,
 }
 
 impl RunningBroker {
@@ -256,6 +273,81 @@ impl RunningBroker {
     pub fn admission_state(&self) -> &AdmissionState {
         &self.admission_state
     }
+
+    pub fn declare_topic(&mut self, topic: TopicDefinition) -> Result<(), BrokerError> {
+        let name = topic.name().clone();
+
+        if self.topics.contains_key(&name) {
+            return Err(BrokerError::TopicAlreadyExists(TOPIC_ALREADY_EXISTS));
+        }
+
+        self.topics.insert(
+            name,
+            TopicLog {
+                definition: topic,
+                messages: Vec::new(),
+            },
+        );
+
+        Ok(())
+    }
+
+    pub fn publish(
+        &mut self,
+        topic: impl AsRef<str>,
+        timestamp_ns: TimestampNs,
+        payload: MessagePayload,
+    ) -> Result<MessageNotification, BrokerError> {
+        if !self.admission_state.admits_writes() {
+            return Err(BrokerError::WriteAdmissionRejected(WRITE_ADMISSION_REJECTED));
+        }
+
+        let log = self
+            .topics
+            .get_mut(topic.as_ref())
+            .ok_or(BrokerError::UnknownTopic(UNKNOWN_TOPIC))?;
+
+        if payload.schema().as_ref() != log.definition.schema().as_ref() {
+            return Err(BrokerError::PayloadSchemaMismatch(PAYLOAD_SCHEMA_MISMATCH));
+        }
+
+        if let Some(last_message) = log.messages.last() {
+            if timestamp_ns <= last_message.timestamp_ns {
+                return Err(BrokerError::MessageTimestampNotAdvancing(MESSAGE_TIMESTAMP_NOT_ADVANCING));
+            }
+        }
+
+        let notification = MessageNotification::new(log.definition.name().clone(), timestamp_ns, payload.num_rows());
+        log.messages.push(StoredMessage { timestamp_ns, payload });
+
+        Ok(notification)
+    }
+
+    pub fn notifications_since(
+        &self,
+        topic: impl AsRef<str>,
+        after_timestamp_ns: TimestampNs,
+    ) -> Result<Vec<MessageNotification>, BrokerError> {
+        let log = self.topics.get(topic.as_ref()).ok_or(BrokerError::UnknownTopic(UNKNOWN_TOPIC))?;
+
+        Ok(log
+            .messages
+            .iter()
+            .filter(|message| message.timestamp_ns > after_timestamp_ns)
+            .map(|message| MessageNotification::new(log.definition.name().clone(), message.timestamp_ns, message.payload.num_rows()))
+            .collect())
+    }
+
+    pub fn payloads_since(&self, topic: impl AsRef<str>, after_timestamp_ns: TimestampNs) -> Result<Vec<MessagePayload>, BrokerError> {
+        let log = self.topics.get(topic.as_ref()).ok_or(BrokerError::UnknownTopic(UNKNOWN_TOPIC))?;
+
+        Ok(log
+            .messages
+            .iter()
+            .filter(|message| message.timestamp_ns > after_timestamp_ns)
+            .map(|message| message.payload.clone())
+            .collect())
+    }
 }
 
 /// Broker startup/configuration errors.
@@ -265,4 +357,14 @@ pub enum BrokerError {
     ConfigLoad(&'static str),
     #[error("invalid broker configuration: {0}")]
     InvalidConfig(&'static str),
+    #[error("message timestamp rejected: {0}")]
+    MessageTimestampNotAdvancing(&'static str),
+    #[error("payload rejected: {0}")]
+    PayloadSchemaMismatch(&'static str),
+    #[error("topic declaration rejected: {0}")]
+    TopicAlreadyExists(&'static str),
+    #[error("topic lookup failed: {0}")]
+    UnknownTopic(&'static str),
+    #[error("write rejected: {0}")]
+    WriteAdmissionRejected(&'static str),
 }

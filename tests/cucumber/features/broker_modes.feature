@@ -39,3 +39,13 @@ Feature: Broker cluster startup
     Then the topic name is "orders.received"
     And the topic Arrow schema contains field "order_id"
     And no partition input is required
+
+  Scenario: Single-node broker accepts an Arrow message and exposes timestamp progress
+    Given a broker is configured for a single-node cluster
+    When the broker starts
+    And topic "orders.received" exists
+    And a client publishes order "order-1" at timestamp 1700000000000000000
+    And a subscriber polls topic "orders.received" after timestamp 0
+    Then the accepted message notification timestamp is 1700000000000000000
+    And the subscriber sees 1 notification
+    And the subscriber receives 1 Arrow payload batch

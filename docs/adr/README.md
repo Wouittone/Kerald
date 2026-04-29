@@ -26,3 +26,4 @@ Number ADR files sequentially with a short kebab-case title, for example `0001-c
 - `0002-broker-coordination-subsystem.md`: Default clustered broker coordination algorithm using TigerBeetle-style VSR.
 - `0003-async-broker-runtime.md`: Async-first broker lifecycle and runtime boundary.
 - `0004-partitionless-topic-model.md`: Public topic model with partitionless name and Arrow schema metadata.
+- `0005-first-message-flow.md`: First in-memory broker message flow with Arrow payloads, timestamp cursors, and separated notification/payload polling.
