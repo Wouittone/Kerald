@@ -49,3 +49,11 @@ Feature: Broker cluster startup
     Then the accepted message notification timestamp is 1700000000000000000
     And the subscriber sees 1 notification
     And the subscriber receives 1 Arrow payload batch
+
+  Scenario: Single-node broker rejects ingress when the volatile message window is full
+    Given a broker is configured for a single-node cluster
+    When the broker starts
+    And topic "orders.received" exists
+    And clients fill the volatile message window for topic "orders.received"
+    And a client tries to publish another order to topic "orders.received"
+    Then the publish is rejected because the volatile message window is full

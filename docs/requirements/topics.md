@@ -18,6 +18,9 @@ The topic model must preserve Kerald's core guarantees:
   tracking.
 - Accepted messages for a topic must advance the topic timestamp cursor so
   subscribers can poll by nanosecond timestamp without offset semantics.
+- Until durable Lance/OpenDAL persistence exists, any volatile broker message
+  window must be explicitly bounded and must reject ingress when full rather
+  than growing without limit or silently dropping accepted messages.
 
 Topic names are operator and client visible identifiers. The initial name rules
 are intentionally simple and portable:

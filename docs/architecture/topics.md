@@ -21,6 +21,9 @@ Current implementation boundary:
 - A running single-node broker can declare a topic, accept a schema-matching
   Arrow payload, return a notification timestamp, and let subscribers poll
   notifications and payload batches independently by timestamp cursor.
+- The bootstrap in-memory path is a bounded volatile window only. It rejects
+  ingress when the topic catalog or per-topic message window is full; it is not
+  a broker persistence strategy.
 - Multi-node brokers continue to reject writes until coordination can prove
   quorum safety.
 - Durable topic catalog storage, Lance persistence, OpenDAL-backed object

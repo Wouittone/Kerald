@@ -14,7 +14,7 @@ writes until coordination can prove quorum safety.
 
 ## Decision
 
-Add an in-memory single-node message flow to `RunningBroker`:
+Add a bounded volatile single-node message flow to `RunningBroker`:
 
 - Declare topics with `TopicDefinition`.
 - Publish Arrow `RecordBatch` payloads directly through the `MessagePayload`
@@ -24,10 +24,14 @@ Add an in-memory single-node message flow to `RunningBroker`:
 - Return `MessageNotification` for accepted writes.
 - Let subscribers poll notifications and payload batches independently with
   nanosecond timestamp cursors.
+- Keep the volatile topic catalog and per-topic message window explicitly
+  bounded.
 
 The broker rejects publishes when write admission is disabled, the topic is
 unknown, the payload schema does not match the topic schema, or the timestamp
-does not advance.
+does not advance. It also rejects ingress when the volatile per-topic message
+window is full. It rejects new topic declarations when the volatile topic
+catalog is full.
 
 This decision does not introduce durable Lance storage, OpenDAL object storage,
 QUIC transport, replication, or multi-node write routing.
@@ -40,18 +44,25 @@ QUIC transport, replication, or multi-node write routing.
 - A custom payload wrapper around Arrow batches: rejected because `RecordBatch`
   already represents the payload shape and extra single-field wrappers add
   indirection.
+- Unbounded in-memory message retention: rejected because it violates Kerald's
+  lightweight and efficiency-first mission and can silently convert broker
+  memory into the message store.
+- Dropping older accepted messages from a ring buffer: rejected because that
+  would silently degrade delivery guarantees.
 - Blocking subscriber delivery calls: rejected because notification tracking
   must remain independent from payload delivery tracking.
 
 ## Consequences
 
 The first message can flow through the broker API while preserving the core
-topic invariants. Tests can now exercise publish, notification polling, and
-payload polling before protocol and persistence work begins.
+topic invariants and avoiding unbounded memory growth. Tests can now exercise
+publish, bounded ingress rejection, notification polling, and payload polling
+before protocol and persistence work begins.
 
-The implementation is intentionally volatile storage. Restart durability,
+The implementation is intentionally a tiny volatile window. Restart durability,
 retention, TTL enforcement, Lance persistence, OpenDAL-backed storage, and
-replicated delivery guarantees remain future work.
+replicated delivery guarantees remain future work. This path must be replaced
+before any production claim of durable delivery.
 
 ## Rollout or Migration Notes
 

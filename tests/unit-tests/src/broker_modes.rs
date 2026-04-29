@@ -2,7 +2,7 @@ use arrow_array::{RecordBatch, StringArray, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use kerald::{
     Broker, BrokerConfig, BrokerError, BrokerNodeId, ClusterConfig, InterBrokerConfig, MessageNotification, TOPIC_NAME_MAX_LEN_BYTES,
-    TopicDefinition, TopicError, parse_topic_name,
+    TopicDefinition, TopicError, VOLATILE_TOPIC_LIMIT, VOLATILE_TOPIC_MESSAGE_LIMIT, parse_topic_name,
 };
 use std::{
     num::{NonZeroU16, NonZeroUsize},
@@ -15,8 +15,10 @@ const COORDINATION_QUORUM_NOT_DISCOVERED: &str = "cluster coordination has not d
 const INVALID_BROKER_CONFIG: &str = "broker configuration values are invalid";
 const INVALID_BROKER_NODE_UUID: &str = "broker node id must be a UUID";
 const MESSAGE_TIMESTAMP_NOT_ADVANCING: &str = "message timestamp must advance beyond the topic cursor";
+const MESSAGE_WINDOW_FULL: &str = "volatile message window is full";
 const PAYLOAD_SCHEMA_MISMATCH: &str = "message payload schema does not match the topic schema";
 const TOPIC_ALREADY_EXISTS: &str = "topic already exists";
+const TOPIC_CATALOG_FULL: &str = "volatile topic catalog is full";
 const UNKNOWN_TOPIC: &str = "topic does not exist";
 const WRITE_ADMISSION_REJECTED: &str = "write admission is not enabled";
 const EMPTY_TOPIC_NAME: &str = "topic name must not be empty";
@@ -199,6 +201,26 @@ async fn duplicate_topic_declarations_are_rejected() {
 }
 
 #[tokio::test]
+async fn volatile_topic_catalog_rejects_unbounded_growth() {
+    let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("broker should start");
+
+    for topic_index in 0..VOLATILE_TOPIC_LIMIT {
+        broker
+            .declare_topic(TopicDefinition::new(format!("orders.received.{topic_index}"), order_schema()).expect("topic should be valid"))
+            .expect("topic declaration should fit inside the volatile catalog");
+    }
+
+    let error = broker
+        .declare_topic(TopicDefinition::new("orders.received.overflow", order_schema()).expect("topic should be valid"))
+        .expect_err("topic declaration should reject catalog growth beyond the volatile limit");
+
+    assert_eq!(error, BrokerError::TopicCatalogFull(TOPIC_CATALOG_FULL));
+}
+
+#[tokio::test]
 async fn publishing_rejects_unknown_topics() {
     let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
         .start()
@@ -259,6 +281,36 @@ async fn publishing_rejects_non_advancing_timestamps() {
         .expect_err("duplicate timestamp should be rejected");
 
     assert_eq!(error, BrokerError::MessageTimestampNotAdvancing(MESSAGE_TIMESTAMP_NOT_ADVANCING));
+}
+
+#[tokio::test]
+async fn publishing_rejects_when_volatile_message_window_is_full() {
+    let mut broker = Broker::new(BrokerConfig::single_node(port(9000)))
+        .start()
+        .await
+        .expect("broker should start");
+    broker
+        .declare_topic(TopicDefinition::new("orders.received", order_schema()).expect("topic should be valid"))
+        .expect("topic declaration should succeed");
+
+    for message_index in 0..VOLATILE_TOPIC_MESSAGE_LIMIT {
+        let timestamp_ns = 1_700_000_000_000_000_000 + i64::try_from(message_index).expect("message index should fit i64");
+        broker
+            .publish("orders.received", timestamp_ns, order_payload("order-accepted", timestamp_ns))
+            .expect("message should fit inside the volatile window");
+    }
+
+    let overflow_timestamp_ns =
+        1_700_000_000_000_000_000 + i64::try_from(VOLATILE_TOPIC_MESSAGE_LIMIT).expect("message limit should fit i64");
+    let error = broker
+        .publish(
+            "orders.received",
+            overflow_timestamp_ns,
+            order_payload("order-rejected", overflow_timestamp_ns),
+        )
+        .expect_err("publish should reject growth beyond the volatile window");
+
+    assert_eq!(error, BrokerError::MessageWindowFull(MESSAGE_WINDOW_FULL));
 }
 
 #[tokio::test]

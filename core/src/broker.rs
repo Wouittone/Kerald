@@ -1,17 +1,21 @@
 use crate::broker_error_messages::{
     CONFIG_LOAD_FAILED, COORDINATION_QUORUM_NOT_DISCOVERED, INVALID_BROKER_CONFIG, INVALID_BROKER_NODE_UUID,
-    MESSAGE_TIMESTAMP_NOT_ADVANCING, PAYLOAD_SCHEMA_MISMATCH, TOPIC_ALREADY_EXISTS, UNKNOWN_TOPIC, WRITE_ADMISSION_REJECTED,
+    MESSAGE_TIMESTAMP_NOT_ADVANCING, MESSAGE_WINDOW_FULL, PAYLOAD_SCHEMA_MISMATCH, TOPIC_ALREADY_EXISTS, TOPIC_CATALOG_FULL, UNKNOWN_TOPIC,
+    WRITE_ADMISSION_REJECTED,
 };
 use crate::topic::{MessageNotification, MessagePayload, TimestampNs, TopicDefinition, TopicName};
 use serde::Deserialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     num::{NonZeroU16, NonZeroUsize},
     path::Path,
 };
 use thiserror::Error;
 use tracing::{info, warn};
 use uuid::Uuid;
+
+pub const VOLATILE_TOPIC_LIMIT: usize = 64;
+pub const VOLATILE_TOPIC_MESSAGE_LIMIT: usize = 2;
 
 /// Durable identity for a broker process.
 ///
@@ -244,7 +248,7 @@ struct StoredMessage {
 #[derive(Debug, Clone, PartialEq)]
 struct TopicLog {
     definition: TopicDefinition,
-    messages: Vec<StoredMessage>,
+    messages: VecDeque<StoredMessage>,
 }
 
 /// Broker process after startup validation and initial discovery evaluation.
@@ -281,11 +285,15 @@ impl RunningBroker {
             return Err(BrokerError::TopicAlreadyExists(TOPIC_ALREADY_EXISTS));
         }
 
+        if self.topics.len() >= VOLATILE_TOPIC_LIMIT {
+            return Err(BrokerError::TopicCatalogFull(TOPIC_CATALOG_FULL));
+        }
+
         self.topics.insert(
             name,
             TopicLog {
                 definition: topic,
-                messages: Vec::new(),
+                messages: VecDeque::new(),
             },
         );
 
@@ -311,14 +319,18 @@ impl RunningBroker {
             return Err(BrokerError::PayloadSchemaMismatch(PAYLOAD_SCHEMA_MISMATCH));
         }
 
-        if let Some(last_message) = log.messages.last() {
+        if log.messages.len() >= VOLATILE_TOPIC_MESSAGE_LIMIT {
+            return Err(BrokerError::MessageWindowFull(MESSAGE_WINDOW_FULL));
+        }
+
+        if let Some(last_message) = log.messages.back() {
             if timestamp_ns <= last_message.timestamp_ns {
                 return Err(BrokerError::MessageTimestampNotAdvancing(MESSAGE_TIMESTAMP_NOT_ADVANCING));
             }
         }
 
         let notification = MessageNotification::new(log.definition.name().clone(), timestamp_ns, payload.num_rows());
-        log.messages.push(StoredMessage { timestamp_ns, payload });
+        log.messages.push_back(StoredMessage { timestamp_ns, payload });
 
         Ok(notification)
     }
@@ -359,10 +371,14 @@ pub enum BrokerError {
     InvalidConfig(&'static str),
     #[error("message timestamp rejected: {0}")]
     MessageTimestampNotAdvancing(&'static str),
+    #[error("message rejected: {0}")]
+    MessageWindowFull(&'static str),
     #[error("payload rejected: {0}")]
     PayloadSchemaMismatch(&'static str),
     #[error("topic declaration rejected: {0}")]
     TopicAlreadyExists(&'static str),
+    #[error("topic declaration rejected: {0}")]
+    TopicCatalogFull(&'static str),
     #[error("topic lookup failed: {0}")]
     UnknownTopic(&'static str),
     #[error("write rejected: {0}")]

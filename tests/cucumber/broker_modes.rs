@@ -3,7 +3,7 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use cucumber::{World, given, then, when};
 use kerald::{
     AdmissionState, Broker, BrokerConfig, BrokerError, ClusterConfig, DiscoveryState, InterBrokerConfig, MessageNotification,
-    TopicDefinition, TopicError,
+    TopicDefinition, TopicError, VOLATILE_TOPIC_MESSAGE_LIMIT,
 };
 use std::{
     num::{NonZeroU16, NonZeroUsize},
@@ -24,6 +24,7 @@ struct BrokerWorld {
     notification: Option<MessageNotification>,
     notifications: Vec<MessageNotification>,
     payloads: Vec<RecordBatch>,
+    publish_error: Option<BrokerError>,
 }
 
 #[given("a broker is configured for a single-node cluster")]
@@ -111,6 +112,29 @@ async fn client_publishes_order(world: &mut BrokerWorld, order_id: String, times
             .publish("orders.received", timestamp_ns, order_payload(&order_id))
             .expect("message publish should be accepted"),
     );
+}
+
+#[when(expr = "clients fill the volatile message window for topic {string}")]
+async fn clients_fill_volatile_message_window(world: &mut BrokerWorld, topic_name: String) {
+    let broker = world.broker.as_mut().expect("broker should be started before publishing");
+
+    for message_index in 0..VOLATILE_TOPIC_MESSAGE_LIMIT {
+        let timestamp_ns = 1_700_000_000_000_000_000 + i64::try_from(message_index).expect("message index should fit i64");
+        broker
+            .publish(&topic_name, timestamp_ns, order_payload("order-accepted"))
+            .expect("message should fit inside the volatile message window");
+    }
+}
+
+#[when(expr = "a client tries to publish another order to topic {string}")]
+async fn client_tries_to_publish_another_order(world: &mut BrokerWorld, topic_name: String) {
+    let broker = world.broker.as_mut().expect("broker should be started before publishing");
+    let timestamp_ns = 1_700_000_000_000_000_000 + i64::try_from(VOLATILE_TOPIC_MESSAGE_LIMIT).expect("message limit should fit i64");
+
+    match broker.publish(&topic_name, timestamp_ns, order_payload("order-rejected")) {
+        Ok(notification) => world.notification = Some(notification),
+        Err(error) => world.publish_error = Some(error),
+    }
 }
 
 #[when(expr = "a subscriber polls topic {string} after timestamp {int}")]
@@ -206,6 +230,14 @@ async fn subscriber_sees_notification_count(world: &mut BrokerWorld, notificatio
 async fn subscriber_receives_payload_batch_count(world: &mut BrokerWorld, payload_count: usize) {
     assert_eq!(world.payloads.len(), payload_count);
     assert!(world.payloads.iter().all(|payload| payload.schema().field(0).name() == "order_id"));
+}
+
+#[then("the publish is rejected because the volatile message window is full")]
+async fn publish_rejected_because_volatile_window_is_full(world: &mut BrokerWorld) {
+    assert_eq!(
+        world.publish_error,
+        Some(BrokerError::MessageWindowFull("volatile message window is full"))
+    );
 }
 
 fn non_zero_port(port: u16) -> NonZeroU16 {
