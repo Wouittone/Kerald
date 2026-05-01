@@ -66,8 +66,8 @@ Kerald uses a specialist-agent workflow to keep development fast while protectin
 6. **Validation and closure**
    - Run focused checks first, then CI-equivalent checks when practical:
      - `cargo fmt --check`
-     - `cargo clippy --all-targets --all-features -- -D warnings`
-     - `cargo test --all --all-features`
+     - `cargo clippy --target x86_64-unknown-linux-musl --all-targets --all-features -- -D warnings`
+     - `cargo test --target x86_64-unknown-linux-musl --all --all-features`
    - If validation cannot run, document the blocker and next safest command.
    - End with the PR quality gate checklist from `docs/operations/pr-quality-gate.md`.
 

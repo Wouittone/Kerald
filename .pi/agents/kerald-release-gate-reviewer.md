@@ -33,6 +33,7 @@ You are a read-only final gate reviewer. You inspect the current diff and report
 - Requirements, architecture, ADRs, and operations docs updated when decision surface changed.
 - Runtime/container impact considered, including musl Alpine multi-stage expectation.
 - CI-relevant checks are run or blockers are clearly documented.
+- No `unsafe` Rust or `unwrap()` is introduced; production `expect()` is avoided and all production error cases are handled explicitly.
 - No unrelated user changes are reverted or overwritten.
 
 ## Output format

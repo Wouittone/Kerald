@@ -43,7 +43,18 @@ fn single_node_cluster_has_quorum_one() {
 
     assert_eq!(config.expected_brokers().get(), 1);
     assert_eq!(config.quorum_size().get(), 1);
+    assert_eq!(config.cluster_id(), "kerald-dev");
+    assert_eq!(config.data_dir(), std::path::Path::new("kerald-data"));
     assert!(config.is_single_node());
+}
+
+#[test]
+fn cluster_config_carries_durable_identity_settings() {
+    let config = ClusterConfig::with_identity(cluster_size(3), "orders-prod", "data/orders-prod");
+
+    assert_eq!(config.expected_brokers().get(), 3);
+    assert_eq!(config.cluster_id(), "orders-prod");
+    assert_eq!(config.data_dir(), std::path::Path::new("data/orders-prod"));
 }
 
 #[test]
@@ -67,6 +78,8 @@ fn broker_config_loads_from_toml_resource() {
 
     assert_eq!(config.cluster().expected_brokers().get(), 3);
     assert_eq!(config.cluster().quorum_size().get(), 2);
+    assert_eq!(config.cluster().cluster_id(), "test-cluster");
+    assert_eq!(config.cluster().data_dir(), std::path::Path::new("target/test-data/toml-broker"));
     assert_eq!(config.inter_broker().port().get(), 9000);
 }
 
@@ -75,6 +88,8 @@ fn broker_config_loads_from_json_resource() {
     let config = BrokerConfig::from_path(resource_path("broker-single-node.json")).expect("JSON config should load");
 
     assert_eq!(config.cluster().quorum_size().get(), 1);
+    assert_eq!(config.cluster().cluster_id(), "test-cluster");
+    assert_eq!(config.cluster().data_dir(), std::path::Path::new("target/test-data/json-broker"));
     assert_eq!(config.inter_broker().port().get(), 9000);
 }
 
@@ -83,6 +98,8 @@ fn broker_config_loads_from_yaml_resource() {
     let config = BrokerConfig::from_path(resource_path("broker-multi-node.yaml")).expect("YAML config should load");
 
     assert_eq!(config.cluster().expected_brokers().get(), 3);
+    assert_eq!(config.cluster().cluster_id(), "test-cluster");
+    assert_eq!(config.cluster().data_dir(), std::path::Path::new("target/test-data/yaml-broker"));
     assert_eq!(config.inter_broker().port().get(), 9002);
 }
 

@@ -28,10 +28,11 @@ Read `AGENTS.md`, `tests/README.md`, suite-specific READMEs, and the changed imp
 - Require Cucumber coverage for observable behavior changes, or write an explicit rationale when not applicable.
 - Design tests around Kerald invariants: partitionless topics, nanosecond timestamp cursors, notification/delivery separation, safety-first admission, Lance/OpenDAL boundaries, and operational simplicity.
 - Avoid brittle tests that assert incidental formatting or implementation details.
+- Enforce Rust safety hygiene: no `unsafe` Rust and no `unwrap()` anywhere. Production code should also avoid `expect()`; tests may use `expect()` for clear assertion failures.
 
 ## Validation
 
-Prefer the repository's CI checks locally: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --all --all-features`.
+Prefer the repository's musl-targeted CI checks locally: `cargo fmt --check`, `cargo clippy --target x86_64-unknown-linux-musl --all-targets --all-features -- -D warnings`, and `cargo test --target x86_64-unknown-linux-musl --all --all-features`. Do not use Windows GNU/clang linker workarounds as the validation target.
 
 ## Output
 

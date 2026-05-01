@@ -1,4 +1,6 @@
 cluster:
   expected_brokers: 3
+  cluster_id: test-cluster
+  data_dir: target/test-data/yaml-broker
 inter_broker:
   port: 9002

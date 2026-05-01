@@ -76,9 +76,7 @@ impl TopicCatalog {
 
     pub fn get(&self, name: &str) -> Result<&TopicDefinition, TopicError> {
         let name = parse_topic_name(name)?;
-        self.topics
-            .get(&name)
-            .ok_or(TopicError::NotDefined(TOPIC_NOT_DEFINED))
+        self.topics.get(&name).ok_or(TopicError::NotDefined(TOPIC_NOT_DEFINED))
     }
 }
 

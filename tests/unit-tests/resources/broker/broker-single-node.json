@@ -1,6 +1,8 @@
 {
   "cluster": {
-    "expected_brokers": 1
+    "expected_brokers": 1,
+    "cluster_id": "test-cluster",
+    "data_dir": "target/test-data/json-broker"
   },
   "inter_broker": {
     "port": 9000

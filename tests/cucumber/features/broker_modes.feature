@@ -16,6 +16,11 @@ Feature: Broker cluster startup
     Then the cluster quorum is 2
     And write admission is rejected until voter discovery reaches quorum
 
+  Scenario: Broker identity is durable across restart
+    Given a broker is configured for a single-node cluster
+    When the broker restarts with the same data directory
+    Then the broker UUID is reused
+
   Scenario: Single-node cluster keeps a configured inter-broker port
     Given a broker is configured for a single-node cluster
     And the inter-broker port is 9010

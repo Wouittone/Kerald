@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let config = match cli.config {
         Some(path) => BrokerConfig::from_path(path)?,
-        None => BrokerConfig::single_node(NonZeroU16::new(9000).expect("default inter-broker port is non-zero")),
+        None => BrokerConfig::single_node(default_inter_broker_port()),
     };
 
     let broker = Broker::new(config).start().await?;
@@ -37,6 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn default_inter_broker_port() -> NonZeroU16 {
+    match NonZeroU16::new(9000) {
+        Some(port) => port,
+        None => unreachable!("default inter-broker port is non-zero"),
+    }
 }
 
 fn init_tracing() {

@@ -2,6 +2,7 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use kerald::{AdmissionState, Broker, BrokerConfig, ClusterConfig, DiscoveryState, InterBrokerConfig, TopicDefinition};
 use std::{
     num::{NonZeroU16, NonZeroUsize},
+    path::Path,
     sync::Arc,
 };
 
@@ -13,7 +14,8 @@ fn port(value: u16) -> NonZeroU16 {
 
 #[tokio::test]
 async fn single_node_cluster_starts_with_generated_identity_and_local_admission_enabled() {
-    let broker = Broker::new(BrokerConfig::single_node(port(9000)))
+    let data_dir = tempfile::tempdir().expect("test data dir should be created");
+    let broker = Broker::new(single_node_config(data_dir.path(), port(9000)))
         .start()
         .await
         .expect("single-node broker should start");
@@ -34,7 +36,8 @@ async fn single_node_cluster_starts_with_generated_identity_and_local_admission_
 
 #[tokio::test]
 async fn single_node_cluster_preserves_configured_inter_broker_port_at_startup() {
-    let broker = Broker::new(BrokerConfig::single_node(port(9010)))
+    let data_dir = tempfile::tempdir().expect("test data dir should be created");
+    let broker = Broker::new(single_node_config(data_dir.path(), port(9010)))
         .start()
         .await
         .expect("single-node broker should start with configured inter-broker port");
@@ -52,13 +55,11 @@ async fn single_node_cluster_preserves_configured_inter_broker_port_at_startup()
 
 #[tokio::test]
 async fn multi_node_cluster_discovers_only_local_voter_at_startup_and_rejects_writes_until_quorum() {
-    let broker = Broker::new(BrokerConfig::new(
-        ClusterConfig::new(NonZeroUsize::new(3).expect("cluster size should be non-zero")),
-        InterBrokerConfig::new(port(9000)),
-    ))
-    .start()
-    .await
-    .expect("multi-node broker should start in rejecting admission state");
+    let data_dir = tempfile::tempdir().expect("test data dir should be created");
+    let broker = Broker::new(multi_node_config(data_dir.path(), port(9000)))
+        .start()
+        .await
+        .expect("multi-node broker should start in rejecting admission state");
 
     assert_ne!(broker.local_node_id().as_uuid(), uuid::Uuid::nil());
     assert_eq!(broker.config().cluster().expected_brokers().get(), 3);
@@ -82,17 +83,16 @@ async fn multi_node_cluster_discovers_only_local_voter_at_startup_and_rejects_wr
 
 #[tokio::test]
 async fn partitionless_topic_metadata_is_independent_of_cluster_size() {
-    let single_node = Broker::new(BrokerConfig::single_node(port(9000)))
+    let single_node_dir = tempfile::tempdir().expect("test data dir should be created");
+    let multi_node_dir = tempfile::tempdir().expect("test data dir should be created");
+    let single_node = Broker::new(single_node_config(single_node_dir.path(), port(9000)))
         .start()
         .await
         .expect("single-node broker should start");
-    let multi_node = Broker::new(BrokerConfig::new(
-        ClusterConfig::new(NonZeroUsize::new(3).expect("cluster size should be non-zero")),
-        InterBrokerConfig::new(port(9001)),
-    ))
-    .start()
-    .await
-    .expect("multi-node broker should start");
+    let multi_node = Broker::new(multi_node_config(multi_node_dir.path(), port(9001)))
+        .start()
+        .await
+        .expect("multi-node broker should start");
 
     let topic = TopicDefinition::new("orders.received", order_schema()).expect("topic definition should be valid");
 
@@ -102,6 +102,35 @@ async fn partitionless_topic_metadata_is_independent_of_cluster_size() {
     assert!(!multi_node.config().cluster().is_single_node());
     assert!(single_node.admission_state().admits_writes());
     assert!(!multi_node.admission_state().admits_writes());
+}
+
+#[tokio::test]
+async fn broker_reuses_durable_identity_across_restarts() {
+    let data_dir = tempfile::tempdir().expect("test data dir should be created");
+    let config = single_node_config(data_dir.path(), port(9000));
+
+    let first_start = Broker::new(config.clone()).start().await.expect("first startup should succeed");
+    let second_start = Broker::new(config).start().await.expect("second startup should succeed");
+
+    assert_eq!(first_start.local_node_id(), second_start.local_node_id());
+}
+
+fn single_node_config(data_dir: &Path, port: NonZeroU16) -> BrokerConfig {
+    BrokerConfig::new(
+        ClusterConfig::with_identity(NonZeroUsize::MIN, "test-cluster", data_dir),
+        InterBrokerConfig::new(port),
+    )
+}
+
+fn multi_node_config(data_dir: &Path, port: NonZeroU16) -> BrokerConfig {
+    BrokerConfig::new(
+        ClusterConfig::with_identity(
+            NonZeroUsize::new(3).expect("cluster size should be non-zero"),
+            "test-cluster",
+            data_dir,
+        ),
+        InterBrokerConfig::new(port),
+    )
 }
 
 fn order_schema() -> SchemaRef {

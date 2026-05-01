@@ -1,10 +1,11 @@
 use crate::broker_error_messages::{
-    CONFIG_LOAD_FAILED, COORDINATION_QUORUM_NOT_DISCOVERED, INVALID_BROKER_CONFIG, INVALID_BROKER_NODE_UUID,
+    BROKER_IDENTITY_LOAD_FAILED, BROKER_IDENTITY_PERSIST_FAILED, CONFIG_LOAD_FAILED, COORDINATION_QUORUM_NOT_DISCOVERED,
+    INVALID_BROKER_CONFIG, INVALID_BROKER_NODE_UUID,
 };
 use serde::Deserialize;
 use std::{
     num::{NonZeroU16, NonZeroUsize},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use thiserror::Error;
 use tracing::{info, warn};
@@ -46,17 +47,27 @@ impl std::fmt::Display for BrokerNodeId {
 
 /// Operator-provided cluster size used to calculate quorum.
 ///
-/// The configured count is deliberately separate from discovered membership:
-/// every discovered broker is a voter, but writes are rejected until discovery
-/// can prove that quorum is reachable.
+/// The configured count is deliberately separate from discovered candidates:
+/// the VSR voter set is formed from durable broker identities, and writes are
+/// rejected until coordination can prove that quorum is reachable.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct ClusterConfig {
     expected_brokers: NonZeroUsize,
+    cluster_id: String,
+    data_dir: PathBuf,
 }
 
 impl ClusterConfig {
     pub fn new(expected_brokers: NonZeroUsize) -> Self {
-        Self { expected_brokers }
+        Self::with_identity(expected_brokers, "kerald-dev", "kerald-data")
+    }
+
+    pub fn with_identity(expected_brokers: NonZeroUsize, cluster_id: impl Into<String>, data_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            expected_brokers,
+            cluster_id: cluster_id.into(),
+            data_dir: data_dir.into(),
+        }
     }
 
     pub fn single_node() -> Self {
@@ -67,8 +78,19 @@ impl ClusterConfig {
         self.expected_brokers
     }
 
+    pub fn cluster_id(&self) -> &str {
+        &self.cluster_id
+    }
+
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
     pub fn quorum_size(&self) -> NonZeroUsize {
-        NonZeroUsize::new((self.expected_brokers.get() / 2) + 1).expect("majority quorum for non-zero cluster size is non-zero")
+        match NonZeroUsize::new((self.expected_brokers.get() / 2) + 1) {
+            Some(quorum) => quorum,
+            None => unreachable!("majority quorum for non-zero cluster size is non-zero"),
+        }
     }
 
     pub fn is_single_node(&self) -> bool {
@@ -172,19 +194,16 @@ impl AdmissionState {
 /// Broker process before startup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Broker {
-    local_node_id: BrokerNodeId,
     config: BrokerConfig,
 }
 
 impl Broker {
     pub fn new(config: BrokerConfig) -> Self {
-        Self {
-            local_node_id: BrokerNodeId::generate(),
-            config,
-        }
+        Self { config }
     }
 
     pub async fn start(self) -> Result<RunningBroker, BrokerError> {
+        let local_node_id = load_or_initialize_node_id(self.config.cluster().data_dir()).await?;
         let expected_brokers = self.config.cluster().expected_brokers();
         let quorum_size = self.config.cluster().quorum_size();
 
@@ -194,7 +213,7 @@ impl Broker {
 
         let (discovery_state, admission_state) = if self.config.cluster().is_single_node() {
             info!(
-                local_node_id = %self.local_node_id,
+                local_node_id = %local_node_id,
                 expected_brokers = expected_brokers.get(),
                 quorum = quorum_size.get(),
                 "single-node cluster quorum is immediately available"
@@ -205,7 +224,7 @@ impl Broker {
             )
         } else {
             warn!(
-                local_node_id = %self.local_node_id,
+                local_node_id = %local_node_id,
                 expected_brokers = expected_brokers.get(),
                 discovered_voters = discovered_voters.get(),
                 quorum = quorum_size.get(),
@@ -223,7 +242,7 @@ impl Broker {
         };
 
         Ok(RunningBroker {
-            local_node_id: self.local_node_id,
+            local_node_id,
             config: self.config,
             discovery_state,
             admission_state,
@@ -265,4 +284,25 @@ pub enum BrokerError {
     ConfigLoad(&'static str),
     #[error("invalid broker configuration: {0}")]
     InvalidConfig(&'static str),
+    #[error("broker identity persistence failed: {0}")]
+    IdentityPersistence(&'static str),
+}
+
+async fn load_or_initialize_node_id(data_dir: &Path) -> Result<BrokerNodeId, BrokerError> {
+    let identity_path = data_dir.join("broker-node-id");
+
+    match tokio::fs::read_to_string(&identity_path).await {
+        Ok(value) => BrokerNodeId::parse(value.trim()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            tokio::fs::create_dir_all(data_dir)
+                .await
+                .map_err(|_| BrokerError::IdentityPersistence(BROKER_IDENTITY_PERSIST_FAILED))?;
+            let node_id = BrokerNodeId::generate();
+            tokio::fs::write(&identity_path, node_id.to_string())
+                .await
+                .map_err(|_| BrokerError::IdentityPersistence(BROKER_IDENTITY_PERSIST_FAILED))?;
+            Ok(node_id)
+        }
+        Err(_) => Err(BrokerError::IdentityPersistence(BROKER_IDENTITY_LOAD_FAILED)),
+    }
 }

@@ -39,7 +39,7 @@ You are responsible for Rust broker and core library implementation under `core/
 
 ## Validation
 
-Prefer `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --all --all-features`. On Windows linker issues, use `RUSTFLAGS=-Clinker=rust-lld`.
+Prefer musl-targeted validation: `cargo fmt --check`, `cargo clippy --target x86_64-unknown-linux-musl --all-targets --all-features -- -D warnings`, and `cargo test --target x86_64-unknown-linux-musl --all --all-features`. Do not switch to a Windows GNU/clang workaround for Kerald validation; use the musl target or the Alpine Docker build path.
 
 ## Output
 
