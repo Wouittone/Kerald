@@ -4,7 +4,7 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use futures::TryStreamExt;
 use lance::{
     Dataset,
-    dataset::{DatasetBuilder, ReadParams, WriteMode, WriteParams},
+    dataset::{ReadParams, WriteMode, WriteParams, builder::DatasetBuilder},
 };
 use lance_io::object_store::{ObjectStoreParams, uri_to_url};
 use lance_table::io::commit::RenameCommitHandler;
@@ -134,8 +134,9 @@ impl OpenDalStorage {
         let dataset = self.open_dataset(topic.name()).await?;
         validate_dataset_schema(&dataset, topic.schema())?;
         let mut scanner = dataset.scan();
+        let cursor_filter = format!("{KERALD_CURSOR_FIELD} > {}", after.as_nanos());
         scanner
-            .filter(format!("{KERALD_CURSOR_FIELD} > {}", after.as_nanos()))
+            .filter(&cursor_filter)
             .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
         let batches: Vec<RecordBatch> = scanner
             .try_into_stream()
