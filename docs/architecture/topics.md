@@ -26,7 +26,8 @@ Operational implications:
 
 - A single-node broker can reason about a topic without assigning ownership to a
   partition.
-- A multi-node broker may still reject write admission until coordination can
-  prove quorum safety.
+- A multi-node broker may receive a write on any node, but acknowledgement may
+  route internally through the current VSR primary and must wait until
+  coordination can prove quorum safety.
 - Adding topic metadata must preserve the partitionless surface and avoid
   offset-based progress concepts.

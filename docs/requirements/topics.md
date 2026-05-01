@@ -7,9 +7,13 @@ owners.
 
 The topic model must preserve Kerald's core guarantees:
 
-- Any broker node may accept writes for a topic once safety-first write
-  admission can prove the eventual delivery guarantees for that write.
-- Multi-node routing and replication must remain broker-internal concerns.
+- Any broker node may receive producer writes for a topic. If the broker is not
+  the current VSR primary for the relevant control-plane view, it must route or
+  forward internally; no broker may acknowledge/admit the write until
+  safety-first admission can prove VSR quorum health and the required durability
+  path.
+- Multi-node routing, primary forwarding, and replication must remain
+  broker-internal concerns.
 - Payloads for a topic must conform to the topic's Arrow schema before they are
   accepted into durable broker paths.
 - Client progress must be modeled with nanosecond timestamp cursors, not

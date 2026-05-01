@@ -22,7 +22,7 @@ Read `AGENTS.md`, `docs/adr/0001-cluster-coordination.md`, `docs/adr/0002-broker
 
 - Preserve TigerBeetle-inspired consistency and resilience principles.
 - Keep coordination deterministic, quorum-aware, and safety-first.
-- Ensure any node can accept writes only when eventual delivery guarantees can be upheld.
+- Ensure any node can receive writes, while acknowledgement/admission happens only when VSR quorum and durability guarantees can be upheld.
 - Reject ingress when quorum, durability, storage, coordination, or delivery safety is uncertain.
 - Keep single-node and multi-node modes explicit and operationally simple.
 - Identify split-brain, partial failure, restart, clock, storage, and discovery risks.

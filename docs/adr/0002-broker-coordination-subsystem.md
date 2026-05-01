@@ -9,7 +9,7 @@ ADR 0001 defines Kerald's clustered coordination model: partitionless brokers, d
 Kerald must now choose the concrete broker coordination subsystem that implements that model. In multi-node operation, this subsystem is responsible for:
 
 - Maintaining a single, authoritative ordering of cluster metadata mutations.
-- Determining leadership and quorum health for admission control.
+- Determining the active primary and quorum health for admission control.
 - Ensuring that writes are rejected when eventual delivery guarantees cannot be upheld.
 - Enabling fast failover with bounded operational complexity.
 
@@ -22,8 +22,8 @@ Kerald will implement broker coordination using a **TigerBeetle-style Viewstampe
 Decision boundary:
 
 - **In scope**
-  - Replication and agreement for cluster control-plane state, including discovered voter membership, leader view, fencing epochs, admission state, and configuration changes.
-  - Leader-based quorum protocol with deterministic state machine execution.
+  - Replication and agreement for cluster control-plane state, including deterministic VSR voter-set bootstrap from discovered durable broker UUIDs, later committed reconfiguration records once reconfiguration is defined, VSR view, primary identity, fencing epochs, admission state, and configuration changes.
+  - Primary-based quorum protocol with deterministic state machine execution.
   - Safety-first ingress gating tied to quorum and replication health.
   - Timestamp-cursor compatibility for downstream delivery tracking without introducing offset semantics.
 - **Out of scope**
@@ -33,10 +33,11 @@ Decision boundary:
 Protocol-level requirements for the coordination subsystem:
 
 1. **Deterministic state machine**: all admitted control-plane commands must be applied in exactly the same order on all quorum replicas.
-2. **Single active leader per view**: fencing must prevent stale leaders from admitting writes.
-3. **Quorum-guarded admission**: brokers must reject ingress when quorum durability thresholds are not met.
-4. **Recoverable view change**: failover must preserve safety and avoid split-brain commitment.
-5. **Efficient batching and pipelining**: implementation should favor high throughput and low overhead, aligned with Kerald's efficiency-first mission.
+2. **Single active primary per view**: fencing must prevent stale primaries from admitting writes.
+3. **Quorum-guarded admission**: brokers must reject ingress when quorum durability thresholds are not met. Quorum is calculated as `floor(replica_count / 2) + 1` over the current VSR voter set.
+4. **Discovery is not membership mutation**: discovery may find candidate brokers, but it must not mutate the voter set outside deterministic bootstrap or committed reconfiguration.
+5. **Recoverable view change**: failover must preserve safety and avoid split-brain commitment.
+6. **Efficient batching and pipelining**: implementation should favor high throughput and low overhead, aligned with Kerald's efficiency-first mission.
 
 ## VSR Algorithm Summary
 
@@ -46,7 +47,7 @@ For Kerald, the VSR log is a control-plane log rather than a client-visible offs
 
 Normal operation:
 
-1. A broker routes or forwards an admissible control-plane command to the current primary for the active view.
+1. Any broker may receive a client request, but non-primary brokers must forward or route coordination/admission work to the current primary. External acknowledgement is allowed only after VSR commit and required durability checks complete.
 2. The primary assigns the next operation number, appends the command to its durable log, and sends a prepare message to backups.
 3. Backups reject messages from stale views, persist valid prepares in order, and acknowledge the primary.
 4. The primary commits the operation after quorum acknowledgement, advances the commit point, and broadcasts the committed point.
@@ -60,7 +61,7 @@ View change and recovery:
 4. Any operation committed in an earlier view must be preserved in the new view.
 5. Brokers that are behind replay committed state before they can participate in write admission.
 
-TigerBeetle-style implementation choices should emphasize deterministic voter discovery from inter-broker communication without configured peer-address lists, explicitly reconfigured expected broker counts, deterministic execution, bounded resource usage, batched prepares, pipelined replication, durable writes before acknowledgement, and aggressive fencing of stale primaries. These choices are intended to keep the coordination path efficient while preserving safety-first admission under ambiguous failures.
+TigerBeetle-style implementation choices should emphasize deterministic broker discovery and voter-set bootstrap from durable broker UUIDs without configured peer-address lists; discovery alone must not silently add voters after bootstrap. Expected broker count changes, online membership changes, and voter replacement require explicit committed reconfiguration and a follow-up ADR before implementation. The implementation should also emphasize deterministic execution, bounded resource usage, batched prepares, pipelined replication, durable writes before acknowledgement, and aggressive fencing of stale primaries. These choices are intended to keep the coordination path efficient while preserving safety-first admission under ambiguous failures.
 
 ## Alternatives Considered
 
@@ -99,14 +100,15 @@ Negative consequences:
 
 ## Rollout or Migration Notes
 
-Single-node clusters have quorum 1 and do not require multi-node consensus.
+Single-node clusters have quorum 1 and do not require multi-node consensus. They should still use the same coordination/admission interface as a degenerate VSR view with quorum 1, so behavior does not diverge from multi-node mode.
 
 Multi-node coordination rollout should proceed behind a coordination feature flag while validation suites are expanded. Required follow-up artifacts:
 
 1. Architecture document for broker coordination message flow and state transitions.
-2. Integration tests for leader failover, quorum loss, stale-leader fencing, and recovery.
+2. Integration tests for primary failover, quorum loss, stale-primary fencing, and recovery.
 3. Performance tests for steady-state commit throughput and failover impact.
 4. Cucumber behavior scenarios for safety-first ingress rejection during quorum degradation.
 5. OTel metrics, traces, and log events for view changes, quorum health, commit latency, and admission rejections.
+6. A separate ADR before implementing online membership changes, expected broker count changes, or voter replacement workflows.
 
 No historical data migration is required for this ADR alone because it defines control-plane architecture, not persisted data format changes.

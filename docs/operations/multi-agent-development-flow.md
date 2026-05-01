@@ -20,6 +20,9 @@ Kerald uses a specialist-agent workflow to keep development fast while protectin
 | `kerald-coordination-safety-engineer` | Review cluster coordination, quorum, admission safety, and failure modes. | ADRs, broker mode requirements, coordination tests. |
 | `kerald-storage-persistence-engineer` | Maintain Arrow/Lance/OpenDAL persistence boundaries. | Storage code, storage docs/tests. |
 | `kerald-protocol-bindings-engineer` | Maintain QUIC-front-door and language binding surfaces. | Protocol/bindings docs and tests. |
+| `kerald-python-bindings-junior-engineer` | Validate Python binding usability from a junior application-developer perspective. | PyO3 API examples, docs, Python binding tests. |
+| `kerald-java-bindings-junior-engineer` | Validate Java binding usability from a junior application-developer perspective. | Java 25 FFM API examples, docs, Java binding tests. |
+| `kerald-polyglot-readability-reviewer` | Read-only senior Java/Kotlin/Python readability reviewer for Rust and binding code. | Review findings for comprehensibility, readability, and functional style. |
 | `kerald-qa-stability-engineer` | Design and review correct test-suite coverage. | Unit, integration, performance, and Cucumber tests. |
 | `kerald-observability-ops-engineer` | Maintain OTel, configuration, CI, containers, rollout, and operations readiness. | Operations docs, telemetry/config/container changes. |
 | `kerald-performance-efficiency-engineer` | Protect CPU, memory, network, storage, throughput, and latency. | Performance tests and optimization reviews. |
@@ -34,6 +37,8 @@ Kerald uses a specialist-agent workflow to keep development fast while protectin
 2. **Specialist context**
    - Route docs/decision questions to `kerald-requirements-adr-steward`.
    - Route implementation to the relevant domain engineer.
+   - Route binding ergonomics to `kerald-python-bindings-junior-engineer` and/or `kerald-java-bindings-junior-engineer`.
+   - Route readability and functional-style review to `kerald-polyglot-readability-reviewer`.
    - Route test strategy to `kerald-qa-stability-engineer`.
    - Route production behavior to `kerald-observability-ops-engineer`.
    - Route efficiency-sensitive work to `kerald-performance-efficiency-engineer`.
@@ -51,6 +56,8 @@ Kerald uses a specialist-agent workflow to keep development fast while protectin
    - Use fresh-context, read-only specialist reviews where useful:
      - correctness/regression: domain engineer or `kerald-broker-core-engineer`
      - test adequacy: `kerald-qa-stability-engineer`
+     - binding usability: `kerald-python-bindings-junior-engineer` and/or `kerald-java-bindings-junior-engineer`
+     - readability/functional style: `kerald-polyglot-readability-reviewer`
      - operations/telemetry/container: `kerald-observability-ops-engineer`
      - performance: `kerald-performance-efficiency-engineer`
      - final policy: `kerald-release-gate-reviewer`
@@ -72,7 +79,10 @@ Kerald uses a specialist-agent workflow to keep development fast while protectin
 | Broker runtime/core behavior | `kerald-orchestrator`, `kerald-broker-core-engineer`, `kerald-qa-stability-engineer` |
 | Cluster coordination or admission safety | `kerald-orchestrator`, `kerald-coordination-safety-engineer`, `kerald-requirements-adr-steward`, `kerald-qa-stability-engineer` |
 | Storage/durability | `kerald-orchestrator`, `kerald-storage-persistence-engineer`, `kerald-qa-stability-engineer`, `kerald-observability-ops-engineer` |
-| Protocol or binding API | `kerald-orchestrator`, `kerald-protocol-bindings-engineer`, `kerald-requirements-adr-steward`, `kerald-qa-stability-engineer` |
+| Protocol or binding API | `kerald-orchestrator`, `kerald-protocol-bindings-engineer`, `kerald-requirements-adr-steward`, language-specific junior binding agent, `kerald-qa-stability-engineer` |
+| Python binding ergonomics | `kerald-orchestrator`, `kerald-protocol-bindings-engineer`, `kerald-python-bindings-junior-engineer`, `kerald-qa-stability-engineer` |
+| Java binding ergonomics | `kerald-orchestrator`, `kerald-protocol-bindings-engineer`, `kerald-java-bindings-junior-engineer`, `kerald-qa-stability-engineer` |
+| Rust readability or functional-style review | `kerald-orchestrator`, `kerald-polyglot-readability-reviewer`, relevant domain engineer, `kerald-qa-stability-engineer` |
 | Telemetry/config/container/CI | `kerald-orchestrator`, `kerald-observability-ops-engineer`, `kerald-qa-stability-engineer` |
 | Performance-sensitive change | `kerald-orchestrator`, `kerald-performance-efficiency-engineer`, domain engineer, `kerald-qa-stability-engineer` |
 

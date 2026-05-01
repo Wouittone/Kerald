@@ -9,9 +9,11 @@ Architecture documents should explain component boundaries, protocols, data flow
 - Notification tracking is separate from payload delivery tracking.
 - Write admission is safety-first.
 - Persistence is Lance read/write only behind OpenDAL-backed storage boundaries.
+- Cluster coordination uses TigerBeetle-style Viewstamped Replication (VSR) for control-plane agreement and safety-first admission.
 
 Current architecture notes:
 
+- `broker-coordination.md`: VSR control-plane coordination, admission, schema, and message-flow architecture.
 - `broker-runtime.md`: Async-first broker lifecycle and runtime boundary.
 - `topics.md`: Partitionless topic metadata, Arrow schema, and public model boundary.
 

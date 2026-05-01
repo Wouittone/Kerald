@@ -13,10 +13,12 @@ public API decision because topic identity and schema metadata will be visible
 through Rust, Python, Java, QUIC, and future protocol front doors.
 
 The topic model must also leave safety boundaries intact. Any broker node may
-accept writes only when eventual delivery guarantees can be upheld. Multi-node
-coordination, storage placement, replication, and recovery may need internal
-structures, but those structures must not become client-visible partition
-semantics.
+receive writes, but acknowledgement/admission must wait until VSR-backed
+safety-first admission proves quorum health and the required durability path.
+This must remain internal and must not expose partition, shard, primary
+ownership, or offset concepts to clients. Multi-node coordination, storage
+placement, replication, and recovery may need internal structures, but those
+structures must not become client-visible partition semantics.
 
 This decision does not define write routing, durable topic catalog storage,
 timestamp cursor persistence, subscriber notification tracking, payload polling,

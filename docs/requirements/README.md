@@ -12,7 +12,7 @@ When a change affects public behavior, delivery guarantees, protocol compatibili
 
 Current requirement notes:
 
-- `broker-modes.md`: Single-node and multi-node startup, quorum, and admission behavior.
+- `broker-modes.md`: Single-node and multi-node startup, durable broker identity, VSR voter/bootstrap behavior, quorum, and admission behavior.
 - `product-mission.md`: Core product mission and mandatory system requirements.
 - `runtime-and-bindings.md`: Rust, Python, and Java runtime/binding targets.
 - `topics.md`: Partitionless topic identity, schema, and validation requirements.

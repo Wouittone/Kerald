@@ -4,7 +4,7 @@ Status: Proposed
 
 ## Context
 
-Kerald's broker will serve many concurrent client, inter-broker, persistence, and telemetry operations while preserving safety-first admission and partitionless topic semantics. The runtime boundary must support efficient QUIC transport, dynamic voter discovery, VSR-style coordination, OpenDAL-backed storage, Lance read/write paths, subscriber polling, and OTel telemetry without dedicating one operating-system thread to each concurrent activity.
+Kerald's broker will serve many concurrent client, inter-broker, persistence, and telemetry operations while preserving safety-first admission and partitionless topic semantics. The runtime boundary must support efficient QUIC transport, deterministic broker discovery and VSR voter-set validation, VSR-style coordination, OpenDAL-backed storage, Lance read/write paths, subscriber polling, and OTel telemetry without dedicating one operating-system thread to each concurrent activity.
 
 The first broker startup slice only evaluated static configuration and local admission state, so synchronous startup was sufficient for that limited behavior. As soon as broker lifecycle touches networking, storage, coordination tasks, timers, or graceful shutdown, synchronous APIs would force inefficient blocking or require a later public API break.
 
@@ -55,4 +55,4 @@ Negative consequences:
 
 The initial rollout converts `Broker::start` to `async fn start(self) -> Result<RunningBroker, BrokerError>` and updates the broker server entrypoint, integration tests, and behavior tests to await startup.
 
-Follow-up work should add explicit task supervision, protected control-plane execution, and graceful shutdown once transport, discovery, coordination, or storage tasks are introduced. Behavior and integration suites should cover startup failure, shutdown, admission rejection under runtime failures, and preservation of partitionless timestamp-cursor semantics.
+Follow-up work should add explicit task supervision, protected control-plane execution, and graceful shutdown once transport, discovery, coordination, or storage tasks are introduced. Runtime rollout for VSR must include task supervision and shutdown behavior for primary election/view-change tasks, replication streams, quorum-health timers, and admission rejection paths. Behavior and integration suites should cover startup failure, shutdown, admission rejection under runtime failures, and preservation of partitionless timestamp-cursor semantics.
