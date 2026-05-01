@@ -8,5 +8,7 @@ Operational documents should cover deployment expectations, failure handling, ro
 - musl Alpine multi-stage container builds for lightweight runtime nodes.
 - Explicit failure-mode handling for write admission, storage, delivery, and cluster coordination.
 
-See `container-images.md` for production image expectations and
-`github-merge-gates.md` for repository merge protection and CI requirements.
+See `container-images.md` for production image expectations,
+`github-merge-gates.md` for repository merge protection and CI requirements,
+and `multi-agent-development-flow.md` for the specialist-agent workflow used to
+develop and review Kerald changes.

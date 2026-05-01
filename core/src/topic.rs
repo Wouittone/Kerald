@@ -1,9 +1,12 @@
 use arrow_schema::SchemaRef;
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 const EMPTY_TOPIC_NAME: &str = "topic name must not be empty";
 const INVALID_TOPIC_NAME_CHARACTER: &str = "topic name must contain only ASCII letters, numbers, dots, underscores, or hyphens";
 const TOPIC_NAME_TOO_LONG: &str = "topic name must be at most 255 bytes";
+const TOPIC_ALREADY_DEFINED: &str = "topic is already defined";
+const TOPIC_NOT_DEFINED: &str = "topic is not defined";
 
 /// User-visible topic identifier.
 ///
@@ -55,9 +58,37 @@ impl TopicDefinition {
     }
 }
 
+/// In-memory topic definition catalog for the bootstrap broker.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct TopicCatalog {
+    topics: BTreeMap<TopicName, TopicDefinition>,
+}
+
+impl TopicCatalog {
+    pub fn define(&mut self, topic: TopicDefinition) -> Result<(), TopicError> {
+        if self.topics.contains_key(topic.name()) {
+            return Err(TopicError::AlreadyDefined(TOPIC_ALREADY_DEFINED));
+        }
+
+        self.topics.insert(topic.name().clone(), topic);
+        Ok(())
+    }
+
+    pub fn get(&self, name: &str) -> Result<&TopicDefinition, TopicError> {
+        let name = parse_topic_name(name)?;
+        self.topics
+            .get(&name)
+            .ok_or(TopicError::NotDefined(TOPIC_NOT_DEFINED))
+    }
+}
+
 /// Topic model errors.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum TopicError {
     #[error("invalid topic name: {0}")]
     InvalidName(&'static str),
+    #[error("topic definition failed: {0}")]
+    AlreadyDefined(&'static str),
+    #[error("topic lookup failed: {0}")]
+    NotDefined(&'static str),
 }
