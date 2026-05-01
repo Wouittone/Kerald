@@ -18,12 +18,25 @@ name = "unit_broker_modes"
 path = "tests/unit-tests/src/broker_modes.rs"
 
 [[test]]
+name = "unit_payload_storage"
+path = "tests/unit-tests/src/payload_storage.rs"
+
+[[test]]
 name = "integration_broker_startup"
 path = "tests/integration/broker_startup.rs"
 
 [[test]]
+name = "integration_payload_storage"
+path = "tests/integration/payload_storage.rs"
+
+[[test]]
 name = "cucumber_broker_modes"
 path = "tests/cucumber/broker_modes.rs"
+harness = false
+
+[[test]]
+name = "cucumber_payload_storage"
+path = "tests/cucumber/payload_storage.rs"
 harness = false
 
 [dependencies]

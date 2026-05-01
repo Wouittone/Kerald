@@ -1,7 +1,10 @@
 use crate::TimestampCursor;
 use arrow_array::RecordBatch;
 
-/// Successful write admission and durable payload append result.
+/// Durable payload append metadata produced after a storage write.
+///
+/// This is not a broker write-admission acknowledgement; future broker ingress
+/// must still gate producer acknowledgements on coordination and durability.
 #[derive(Debug, Clone)]
 pub struct PublishReceipt {
     cursor: TimestampCursor,

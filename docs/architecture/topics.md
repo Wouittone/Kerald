@@ -15,9 +15,10 @@ Current implementation boundary:
 - `TopicName` is a `String` alias for the user-visible topic identifier.
 - `parse_topic_name` validates and trims topic names at construction boundaries.
 - `TopicDefinition` stores topic name and Arrow `SchemaRef` metadata directly.
-- Broker write routing, durable topic catalog storage, Arrow payload handling,
-  timestamp cursors, notification tracking, and payload delivery are future
-  slices.
+- Local payload storage can append and poll Arrow batches in Lance through
+  OpenDAL using nanosecond `TimestampCursor` values.
+- Broker write routing, durable topic catalog storage, notification tracking,
+  and protocol-facing payload delivery are future slices.
 
 The topic model intentionally keeps indirection low. Thin wrappers are avoided
 when a standard Rust or Arrow type already describes the data accurately.

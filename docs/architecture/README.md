@@ -15,6 +15,7 @@ Current architecture notes:
 
 - `broker-coordination.md`: VSR control-plane coordination, admission, schema, and message-flow architecture.
 - `broker-runtime.md`: Async-first broker lifecycle and runtime boundary.
+- `storage.md`: Lance/OpenDAL payload storage boundary and timestamp cursor polling.
 - `topics.md`: Partitionless topic metadata, Arrow schema, and public model boundary.
 
 When an architecture document records a long-lived decision rather than explanatory context, add or update an ADR in `docs/adr/`.

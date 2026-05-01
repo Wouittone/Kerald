@@ -209,5 +209,5 @@ fn order_schema() -> SchemaRef {
 
 #[tokio::main]
 async fn main() {
-    BrokerWorld::run("tests/cucumber/features").await;
+    BrokerWorld::run("tests/cucumber/features/broker_modes.feature").await;
 }

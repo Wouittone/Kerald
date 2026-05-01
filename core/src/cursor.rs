@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
+const NEGATIVE_TIMESTAMP_CURSOR: &str = "timestamp cursor must not be negative";
 const SYSTEM_TIME_BEFORE_EPOCH: &str = "system time is before the Unix epoch";
 const SYSTEM_TIME_OVERFLOW: &str = "system time exceeds supported nanosecond cursor range";
 
@@ -9,8 +10,12 @@ const SYSTEM_TIME_OVERFLOW: &str = "system time exceeds supported nanosecond cur
 pub struct TimestampCursor(i64);
 
 impl TimestampCursor {
-    pub const fn new(nanoseconds_since_epoch: i64) -> Self {
-        Self(nanoseconds_since_epoch)
+    pub const fn try_new(nanoseconds_since_epoch: i64) -> Result<Self, TimestampCursorError> {
+        if nanoseconds_since_epoch < 0 {
+            return Err(TimestampCursorError::InvalidNanoseconds(NEGATIVE_TIMESTAMP_CURSOR));
+        }
+
+        Ok(Self(nanoseconds_since_epoch))
     }
 
     pub const fn unix_epoch() -> Self {
@@ -39,6 +44,8 @@ impl TimestampCursor {
 /// Timestamp cursor construction errors.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum TimestampCursorError {
+    #[error("invalid timestamp cursor: {0}")]
+    InvalidNanoseconds(&'static str),
     #[error("invalid timestamp cursor: {0}")]
     InvalidSystemTime(&'static str),
 }
