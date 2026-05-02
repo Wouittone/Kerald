@@ -6,8 +6,10 @@ Kerald persistence must remain lightweight, explicit, and aligned with the broke
 
 - Store Arrow `RecordBatch` payloads in Lance datasets.
 - Access Lance through OpenDAL; local filesystem support uses OpenDAL `Fs`.
+- Route any Lance/object-store compatibility adapter through OpenDAL for object reads, writes, listings, and commit operations; direct filesystem persistence paths must not bypass OpenDAL.
 - Keep topics partitionless: storage APIs must not require partition ids, partition counts, offsets, shard ids, or ownership hints.
-- Use `TimestampCursor` nanoseconds for progress. Polling returns payloads with stored cursor values strictly greater than the supplied cursor.
+- Use `TimestampCursor` nanoseconds for progress. Polling returns payloads with stored cursor values strictly greater than the supplied cursor, ordered by ascending cursor value.
+- Reopening local storage must preserve existing Lance datasets and continue append/poll operations through the OpenDAL path.
 - Reject payload batches whose Arrow schema does not exactly match the topic schema.
 - Reject topic payload schemas that use the reserved internal `__kerald_cursor_ns` field name.
 - Keep notification tracking separate from payload polling.

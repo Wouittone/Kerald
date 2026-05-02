@@ -82,12 +82,17 @@ must not silently replace invalid cluster settings with defaults.
 
 ## Test Coverage
 
-Unit tests cover UUID validation, durable broker UUID reuse, cluster size and
-quorum behavior, VSR voter-set bootstrap validation, inter-broker configuration
-validation, TOML/JSON/YAML config loading, and invalid value rejection.
-Integration tests cover startup state for single-node and multi-node clusters,
-active-view establishment, stale-primary fencing, quorum loss, broker
-rejoin/replay, and non-primary write forwarding without exposing partition
-concepts. Cucumber behavior coverage documents the externally observable
-startup, unsafe-admission rejection, quorum degradation, failover, and
-configuration rejection expectations.
+Current unit tests cover UUID validation, durable broker UUID reuse, cluster size
+and quorum behavior, local-only discovery state, inter-broker configuration
+validation, TOML/JSON/YAML config loading, and invalid value rejection. Current
+integration tests cover startup state for single-node and multi-node clusters,
+durable identity reuse, configured inter-broker port preservation, and
+partitionless topic metadata independent of cluster size. Current Cucumber
+behavior coverage documents externally observable single-node admission,
+multi-node rejection until voter discovery reaches quorum, durable identity
+reuse, invalid configuration rejection, and partitionless topic declaration.
+
+Future VSR implementation must add integration and Cucumber coverage for active
+view establishment, stale-primary fencing, quorum loss, broker rejoin/replay,
+non-primary write forwarding, failover, and unsafe-admission rejection during
+quorum degradation without exposing partition concepts.

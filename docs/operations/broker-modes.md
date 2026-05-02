@@ -36,14 +36,18 @@ configuration instead of being replaced with the development default.
 
 Broker IDs are generated automatically only on first initialization and then
 persisted in the broker data directory. Peer addresses are not configured
-explicitly; brokers discover each other dynamically through inter-broker
-communication on the configured port.
+explicitly. In the current bootstrap slice, no remote voter discovery is running;
+startup can prove only the local broker identity. Future inter-broker discovery
+will use the configured port without introducing operator-managed peer-address
+lists.
 
-Discovery identifies candidate brokers. It does not silently add voters after
+Discovery identifies candidate brokers; it does not silently add voters after
 VSR bootstrap. A single-node cluster has quorum 1 and may admit local writes
-when its durable state is valid. Multi-node clusters start with write admission
-disabled until VSR establishes an active view with a fenced primary and quorum
-durability. Operators should treat this as an explicit safety signal: the
+when its durable state is valid. Because the current implementation can prove
+only the local voter, configured multi-node clusters remain in rejecting
+admission after startup. Future multi-node clusters may enable admission only
+after VSR establishes an active view with a fenced primary and quorum durability.
+Operators should treat rejecting admission as an explicit safety signal: the
 process is running, but ingress remains rejected while quorum-backed
 coordination is unavailable.
 

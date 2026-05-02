@@ -2,6 +2,8 @@
 
 Kerald's payload persistence boundary stores Arrow payload batches in Lance datasets through an OpenDAL operator. The current implementation is local filesystem storage via OpenDAL `Fs`; direct filesystem persistence paths are avoided so future S3, R2, GCS, and Azure Blob support can use the same abstraction.
 
+Lance integration may use object-store compatibility shims required by Lance APIs, but those shims are part of the storage boundary and must route object reads, writes, listings, and commits through the OpenDAL operator. URI schemes or metadata refreshes used to satisfy Lance/object-store contracts are internal implementation details, not permission to bypass OpenDAL with a broker-owned filesystem path.
+
 ## Payload datasets
 
 Each partitionless topic maps to a Lance dataset under the storage root. Kerald prepends a reserved internal `__kerald_cursor_ns` timestamp-nanosecond column to persisted batches. Client payload schemas remain Arrow schemas owned by `TopicDefinition`; the reserved column is internal storage metadata and payload schemas using that field name are rejected.
@@ -10,6 +12,7 @@ Polling is cursor-based:
 
 - callers pass a `TimestampCursor` measured in nanoseconds since the Unix epoch;
 - storage returns payload batches whose stored cursor is strictly greater than the supplied cursor;
+- returned payload batches are ordered by ascending cursor value;
 - no offset, partition id, partition count, or ownership hint is required.
 
 ## Boundary limits
