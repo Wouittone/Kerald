@@ -1,7 +1,33 @@
 {
-	"image": "mcr.microsoft.com/devcontainers/universal:2",
-	"features": {
-		"ghcr.io/devcontainers/features/rust:1": {}
-	},
-	"postCreateCommand": "npm install -g @openai/codex"
+    "image"           : "mcr.microsoft.com/devcontainers/base:trixie",
+    "features"        : {
+        "ghcr.io/devcontainers/features/common-utils:2"                        : {},
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1"            : {"moby": false},
+        "ghcr.io/devcontainers/features/git:1"                                 : {},
+        "ghcr.io/devcontainers/features/java:1"                                : {"version": "25", "jdkDistro": "tem"},
+        "ghcr.io/devcontainers/features/rust:1"                                : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/astral.sh-uv:1"  : {"shellautocompletion": true},
+        "ghcr.io/devcontainer-community/devcontainer-features/bat:1"           : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/bun.sh:1"        : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/dotenv.org:1"    : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/fd:1"            : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/fzf:1"           : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/github.com-cli:1": {},
+        "ghcr.io/devcontainer-community/devcontainer-features/jq:1"            : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/pi.dev:1"        : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/ripgrep:1"       : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/starship.rs:1"   : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/valgrind.org:1"  : {},
+        "ghcr.io/devcontainer-community/devcontainer-features/yq:1"            : {}
+    },
+    "customizations"  : {
+        "vscode": {
+            "extensions": [
+                "j-brooke.fracturedjsonvsc",   "openai.chatgpt",              "rust-lang.rust-analyzer",
+                "vscjava.vscode-java-pack",    "vmware.vscode-boot-dev-pack", "astral-sh.ty",
+                "charliermarsh.ruff"
+            ]
+        }
+    },
+    "postStartCommand": "source /workspaces/Kerald/.env"
 }
