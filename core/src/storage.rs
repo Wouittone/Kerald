@@ -6,10 +6,7 @@ use lance::{
     Dataset,
     dataset::{ReadParams, WriteMode, WriteParams, builder::DatasetBuilder},
 };
-use lance_io::object_store::{ObjectStoreParams, uri_to_url};
 use lance_table::io::commit::RenameCommitHandler;
-use object_store::DynObjectStore;
-use object_store_opendal::OpendalStore;
 use opendal::{Operator, services::Fs};
 use serde::Deserialize;
 use std::{
@@ -102,17 +99,13 @@ impl OpenDalStorage {
             let mut dataset = self.open_dataset(topic.name()).await?;
             validate_dataset_schema(&dataset, topic.schema())?;
             dataset
-                .append(reader, Some(self.write_params(topic.name(), WriteMode::Append)?))
+                .append(reader, Some(self.write_params(WriteMode::Append)))
                 .await
                 .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
         } else {
-            Dataset::write(
-                reader,
-                &self.dataset_uri(topic.name()),
-                Some(self.write_params(topic.name(), WriteMode::Create)?),
-            )
-            .await
-            .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
+            Dataset::write(reader, &self.dataset_uri(topic.name()), Some(self.write_params(WriteMode::Create)))
+                .await
+                .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
         }
 
         Ok(())
@@ -134,7 +127,7 @@ impl OpenDalStorage {
         let dataset = self.open_dataset(topic.name()).await?;
         validate_dataset_schema(&dataset, topic.schema())?;
         let mut scanner = dataset.scan();
-        let cursor_filter = format!("{KERALD_CURSOR_FIELD} > {}", after.as_nanos());
+        let cursor_filter = format!("{KERALD_CURSOR_FIELD} > to_timestamp_nanos({})", after.as_nanos());
         scanner
             .filter(&cursor_filter)
             .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
@@ -157,7 +150,7 @@ impl OpenDalStorage {
 
     async fn open_dataset(&self, topic_name: &TopicName) -> Result<Dataset, StorageError> {
         DatasetBuilder::from_uri(self.dataset_uri(topic_name))
-            .with_read_params(self.read_params(topic_name)?)
+            .with_read_params(self.read_params())
             .load()
             .await
             .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))
@@ -168,39 +161,24 @@ impl OpenDalStorage {
     }
 
     fn dataset_uri(&self, topic_name: &TopicName) -> String {
-        // Lance validates URI schemes even when a custom object store is supplied.
-        // Use its object-store-backed local scheme while all IO still flows through
-        // the OpenDAL store injected in `object_store_params`.
-        format!("file-object-store:///{}", self.dataset_path(topic_name))
+        self.root.join(self.dataset_path(topic_name)).to_string_lossy().into_owned()
     }
 
-    fn object_store_params(&self, topic_name: &TopicName) -> Result<ObjectStoreParams, StorageError> {
-        let store: Arc<DynObjectStore> = Arc::new(OpendalStore::new(self.operator.clone()));
-        let url = uri_to_url(&self.dataset_uri(topic_name)).map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
-
-        #[allow(deprecated)]
-        Ok(ObjectStoreParams {
-            object_store: Some((store, url)),
-            list_is_lexically_ordered: Some(false),
-            ..ObjectStoreParams::default()
-        })
-    }
-
-    fn read_params(&self, topic_name: &TopicName) -> Result<ReadParams, StorageError> {
-        Ok(ReadParams {
-            store_options: Some(self.object_store_params(topic_name)?),
+    fn read_params(&self) -> ReadParams {
+        ReadParams {
+            store_options: None,
             commit_handler: Some(Arc::new(RenameCommitHandler)),
             ..ReadParams::default()
-        })
+        }
     }
 
-    fn write_params(&self, topic_name: &TopicName, mode: WriteMode) -> Result<WriteParams, StorageError> {
-        Ok(WriteParams {
+    fn write_params(&self, mode: WriteMode) -> WriteParams {
+        WriteParams {
             mode,
-            store_params: Some(self.object_store_params(topic_name)?),
+            store_params: None,
             commit_handler: Some(Arc::new(RenameCommitHandler)),
             ..WriteParams::default()
-        })
+        }
     }
 }
 

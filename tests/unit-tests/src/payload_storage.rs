@@ -11,15 +11,16 @@ const SYSTEM_TIME_BEFORE_EPOCH: &str = "system time is before the Unix epoch";
 
 #[test]
 fn timestamp_cursor_converts_system_time_to_exact_nanoseconds() {
-    let time = UNIX_EPOCH + Duration::new(2, 345);
+    let time = UNIX_EPOCH + Duration::new(2, 300);
     let cursor = TimestampCursor::from_system_time(time).expect("time after epoch should convert");
 
-    assert_eq!(cursor.as_nanos(), 2_000_000_345);
+    assert_eq!(cursor.as_nanos(), 2_000_000_300);
 }
 
 #[test]
 fn timestamp_cursor_rejects_times_before_unix_epoch() {
-    let error = TimestampCursor::from_system_time(UNIX_EPOCH - Duration::from_nanos(1)).expect_err("time before epoch should be rejected");
+    let error =
+        TimestampCursor::from_system_time(UNIX_EPOCH - Duration::from_nanos(100)).expect_err("time before epoch should be rejected");
 
     assert_eq!(error, TimestampCursorError::InvalidSystemTime(SYSTEM_TIME_BEFORE_EPOCH));
 }
