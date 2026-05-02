@@ -52,20 +52,20 @@ async fn partitionless_topic_has_no_stored_payloads(world: &mut PayloadStorageWo
 }
 
 #[when(expr = "payloads are polled after cursor {int}")]
-async fn payloads_are_polled_after_cursor(world: &mut PayloadStorageWorld, cursor: i64) {
+async fn payloads_are_polled_after_cursor(world: &mut PayloadStorageWorld, cursor_ns: i64) {
     let storage = world.storage.as_ref().expect("storage should be initialized");
     let topic = world.topic.as_ref().expect("topic should be configured");
 
     world.polled_batches = storage
-        .poll_payloads(topic, cursor(cursor))
+        .poll_payloads(topic, cursor(cursor_ns))
         .await
         .expect("payload polling should succeed");
 }
 
 #[then(expr = "only payload cursor {int} is returned")]
-async fn only_payload_cursor_is_returned(world: &mut PayloadStorageWorld, cursor: i64) {
+async fn only_payload_cursor_is_returned(world: &mut PayloadStorageWorld, expected_cursor_ns: i64) {
     assert_eq!(world.polled_batches.len(), 1);
-    assert_eq!(world.polled_batches[0].cursor(), cursor(cursor));
+    assert_eq!(world.polled_batches[0].cursor(), cursor(expected_cursor_ns));
 }
 
 #[then("no partition or offset input is required for payload polling")]

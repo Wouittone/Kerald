@@ -168,7 +168,10 @@ impl OpenDalStorage {
     }
 
     fn dataset_uri(&self, topic_name: &TopicName) -> String {
-        format!("opendal:///{}", self.dataset_path(topic_name))
+        // Lance validates URI schemes even when a custom object store is supplied.
+        // Use its object-store-backed local scheme while all IO still flows through
+        // the OpenDAL store injected in `object_store_params`.
+        format!("file-object-store:///{}", self.dataset_path(topic_name))
     }
 
     fn object_store_params(&self, topic_name: &TopicName) -> Result<ObjectStoreParams, StorageError> {

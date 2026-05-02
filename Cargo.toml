@@ -64,6 +64,16 @@ unsafe_code = "forbid"
 [lints.clippy]
 unwrap_used = "deny"
 
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+incremental = false
+overflow-checks = false
+
 [dev-dependencies]
 cucumber = "0.23.0"
 tempfile = "3.23.0"
