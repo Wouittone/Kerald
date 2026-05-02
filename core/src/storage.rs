@@ -1,12 +1,11 @@
 use crate::{PolledPayloadBatch, TimestampCursor, TopicDefinition, TopicName};
 use arrow_array::{Array, ArrayRef, RecordBatch, RecordBatchIterator, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
-use futures::TryStreamExt;
+use futures_util::TryStreamExt;
 use lance::{
     Dataset,
-    dataset::{ReadParams, WriteMode, WriteParams, builder::DatasetBuilder},
+    dataset::{WriteMode, WriteParams, builder::DatasetBuilder},
 };
-use lance_table::io::commit::RenameCommitHandler;
 use opendal::{Operator, services::Fs};
 use serde::Deserialize;
 use std::{
@@ -150,7 +149,6 @@ impl OpenDalStorage {
 
     async fn open_dataset(&self, topic_name: &TopicName) -> Result<Dataset, StorageError> {
         DatasetBuilder::from_uri(self.dataset_uri(topic_name))
-            .with_read_params(self.read_params())
             .load()
             .await
             .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))
@@ -164,19 +162,9 @@ impl OpenDalStorage {
         self.root.join(self.dataset_path(topic_name)).to_string_lossy().into_owned()
     }
 
-    fn read_params(&self) -> ReadParams {
-        ReadParams {
-            store_options: None,
-            commit_handler: Some(Arc::new(RenameCommitHandler)),
-            ..ReadParams::default()
-        }
-    }
-
     fn write_params(&self, mode: WriteMode) -> WriteParams {
         WriteParams {
             mode,
-            store_params: None,
-            commit_handler: Some(Arc::new(RenameCommitHandler)),
             ..WriteParams::default()
         }
     }
