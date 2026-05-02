@@ -51,6 +51,22 @@ async fn partitionless_topic_has_no_stored_payloads(world: &mut PayloadStorageWo
     world.topic = Some(TopicDefinition::new(topic_name, order_schema()).expect("scenario topic should be valid"));
 }
 
+#[when("local payload storage is reopened")]
+async fn local_payload_storage_is_reopened(world: &mut PayloadStorageWorld) {
+    let root = world
+        .temp_dir
+        .as_ref()
+        .expect("scenario storage root should exist")
+        .path()
+        .to_path_buf();
+    world.storage = None;
+    let reopened = OpenDalStorage::local(&StorageConfig::local(root))
+        .await
+        .expect("local storage should reopen");
+
+    world.storage = Some(reopened);
+}
+
 #[when(expr = "payloads are polled after cursor {int}")]
 async fn payloads_are_polled_after_cursor(world: &mut PayloadStorageWorld, cursor_ns: i64) {
     let storage = world.storage.as_ref().expect("storage should be initialized");

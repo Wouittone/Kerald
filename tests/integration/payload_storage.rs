@@ -56,6 +56,49 @@ async fn payload_append_and_poll_use_strict_nanosecond_timestamp_cursors() {
 }
 
 #[tokio::test]
+async fn payload_storage_reopens_lance_dataset_through_opendal_path() {
+    let temp_dir = tempfile::tempdir().expect("test storage root should be created");
+    let config = StorageConfig::local(temp_dir.path());
+    let topic = order_topic();
+
+    let storage = OpenDalStorage::local(&config).await.expect("local storage should initialize");
+    storage
+        .append_payload(&topic, cursor(100), order_batch(["created"]))
+        .await
+        .expect("payload dataset should be created through OpenDAL");
+    storage
+        .append_payload(&topic, cursor(200), order_batch(["appended"]))
+        .await
+        .expect("payload dataset should append through OpenDAL");
+    drop(storage);
+
+    let reopened = OpenDalStorage::local(&config)
+        .await
+        .expect("local storage should reopen existing root");
+    let reopened_batches = reopened
+        .poll_payloads(&topic, cursor(100))
+        .await
+        .expect("reopened storage should poll existing Lance dataset");
+
+    assert_eq!(reopened_batches.len(), 1);
+    assert_eq!(reopened_batches[0].cursor(), cursor(200));
+    assert_eq!(string_value(reopened_batches[0].payload(), 0, 0), "appended");
+
+    reopened
+        .append_payload(&topic, cursor(300), order_batch(["after-reopen"]))
+        .await
+        .expect("reopened storage should append through OpenDAL");
+    let appended_after_reopen = reopened
+        .poll_payloads(&topic, cursor(200))
+        .await
+        .expect("reopened append should be pollable");
+
+    assert_eq!(appended_after_reopen.len(), 1);
+    assert_eq!(appended_after_reopen[0].cursor(), cursor(300));
+    assert_eq!(string_value(appended_after_reopen[0].payload(), 0, 0), "after-reopen");
+}
+
+#[tokio::test]
 async fn append_rejects_payloads_that_do_not_match_topic_schema() {
     let temp_dir = tempfile::tempdir().expect("test storage root should be created");
     let storage = OpenDalStorage::local(&StorageConfig::local(temp_dir.path()))

@@ -1,14 +1,23 @@
 use crate::{PolledPayloadBatch, TimestampCursor, TopicDefinition, TopicName};
 use arrow_array::{Array, ArrayRef, RecordBatch, RecordBatchIterator, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
-use futures_util::TryStreamExt;
+use async_trait::async_trait;
+use futures_util::{StreamExt, TryStreamExt, stream::BoxStream};
 use lance::{
     Dataset,
-    dataset::{WriteMode, WriteParams, builder::DatasetBuilder},
+    dataset::{ReadParams, WriteMode, WriteParams, builder::DatasetBuilder},
 };
+use lance_io::object_store::{ObjectStoreParams, uri_to_url};
+use lance_table::io::commit::ConditionalPutCommitHandler;
+use object_store::{
+    DynObjectStore, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore, PutMultipartOptions, PutOptions,
+    PutPayload, PutResult, Result as ObjectStoreResult, path::Path as ObjectStorePath,
+};
+use object_store_opendal::OpendalStore;
 use opendal::{Operator, services::Fs};
 use serde::Deserialize;
 use std::{
+    fmt::{Debug, Display, Formatter},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -98,13 +107,17 @@ impl OpenDalStorage {
             let mut dataset = self.open_dataset(topic.name()).await?;
             validate_dataset_schema(&dataset, topic.schema())?;
             dataset
-                .append(reader, Some(self.write_params(WriteMode::Append)))
+                .append(reader, Some(self.write_params(topic.name(), WriteMode::Append)?))
                 .await
                 .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
         } else {
-            Dataset::write(reader, &self.dataset_uri(topic.name()), Some(self.write_params(WriteMode::Create)))
-                .await
-                .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
+            Dataset::write(
+                reader,
+                &self.dataset_uri(topic.name()),
+                Some(self.write_params(topic.name(), WriteMode::Create)?),
+            )
+            .await
+            .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
         }
 
         Ok(())
@@ -149,6 +162,7 @@ impl OpenDalStorage {
 
     async fn open_dataset(&self, topic_name: &TopicName) -> Result<Dataset, StorageError> {
         DatasetBuilder::from_uri(self.dataset_uri(topic_name))
+            .with_read_params(self.read_params(topic_name)?)
             .load()
             .await
             .map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))
@@ -159,14 +173,127 @@ impl OpenDalStorage {
     }
 
     fn dataset_uri(&self, topic_name: &TopicName) -> String {
-        self.root.join(self.dataset_path(topic_name)).to_string_lossy().into_owned()
+        // Lance validates URI schemes even when a custom object store is supplied.
+        // Use its object-store-backed local scheme while all IO still flows through
+        // the OpenDAL store injected in `object_store_params`.
+        format!("file-object-store:///{}", self.dataset_path(topic_name))
     }
 
-    fn write_params(&self, mode: WriteMode) -> WriteParams {
-        WriteParams {
+    fn object_store_params(&self, topic_name: &TopicName) -> Result<ObjectStoreParams, StorageError> {
+        let store: Arc<DynObjectStore> = Arc::new(LanceOpenDalObjectStore::new(self.operator.clone()));
+        let url = uri_to_url(&self.dataset_uri(topic_name)).map_err(|_| StorageError::Operation(STORAGE_OPERATION_FAILED))?;
+
+        #[allow(deprecated)]
+        Ok(ObjectStoreParams {
+            object_store: Some((store, url)),
+            list_is_lexically_ordered: Some(false),
+            ..ObjectStoreParams::default()
+        })
+    }
+
+    fn read_params(&self, topic_name: &TopicName) -> Result<ReadParams, StorageError> {
+        Ok(ReadParams {
+            store_options: Some(self.object_store_params(topic_name)?),
+            commit_handler: Some(Arc::new(ConditionalPutCommitHandler)),
+            ..ReadParams::default()
+        })
+    }
+
+    fn write_params(&self, topic_name: &TopicName, mode: WriteMode) -> Result<WriteParams, StorageError> {
+        Ok(WriteParams {
             mode,
+            store_params: Some(self.object_store_params(topic_name)?),
+            commit_handler: Some(Arc::new(ConditionalPutCommitHandler)),
             ..WriteParams::default()
+        })
+    }
+}
+
+// Lance uses object-store listings to locate and size manifest files.
+// OpenDAL's filesystem lister can return incomplete file metadata, so this
+// adapter refreshes listed objects through `head` while keeping all reads and
+// writes routed through the OpenDAL operator.
+#[derive(Clone)]
+struct LanceOpenDalObjectStore {
+    inner: OpendalStore,
+}
+
+impl LanceOpenDalObjectStore {
+    fn new(operator: Operator) -> Self {
+        Self {
+            inner: OpendalStore::new(operator),
         }
+    }
+}
+
+impl Debug for LanceOpenDalObjectStore {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LanceOpenDalObjectStore").field("inner", &self.inner).finish()
+    }
+}
+
+impl Display for LanceOpenDalObjectStore {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LanceOpenDalObjectStore({})", self.inner)
+    }
+}
+
+#[async_trait]
+impl ObjectStore for LanceOpenDalObjectStore {
+    async fn put_opts(&self, location: &ObjectStorePath, payload: PutPayload, opts: PutOptions) -> ObjectStoreResult<PutResult> {
+        self.inner.put_opts(location, payload, opts).await
+    }
+
+    async fn put_multipart_opts(
+        &self,
+        location: &ObjectStorePath,
+        opts: PutMultipartOptions,
+    ) -> ObjectStoreResult<Box<dyn MultipartUpload>> {
+        self.inner.put_multipart_opts(location, opts).await
+    }
+
+    async fn get_opts(&self, location: &ObjectStorePath, options: GetOptions) -> ObjectStoreResult<GetResult> {
+        self.inner.get_opts(location, options).await
+    }
+
+    async fn delete(&self, location: &ObjectStorePath) -> ObjectStoreResult<()> {
+        self.inner.delete(location).await
+    }
+
+    fn list(&self, prefix: Option<&ObjectStorePath>) -> BoxStream<'static, ObjectStoreResult<ObjectMeta>> {
+        self.inner
+            .list(prefix)
+            .and_then({
+                let inner = self.inner.clone();
+                move |meta| {
+                    let inner = inner.clone();
+                    async move { inner.head(&meta.location).await }
+                }
+            })
+            .boxed()
+    }
+
+    async fn list_with_delimiter(&self, prefix: Option<&ObjectStorePath>) -> ObjectStoreResult<ListResult> {
+        let mut result = self.inner.list_with_delimiter(prefix).await?;
+        let mut objects = Vec::with_capacity(result.objects.len());
+        for meta in result.objects {
+            objects.push(self.inner.head(&meta.location).await?);
+        }
+        result.objects = objects;
+
+        Ok(result)
+    }
+
+    async fn copy(&self, from: &ObjectStorePath, to: &ObjectStorePath) -> ObjectStoreResult<()> {
+        self.inner.copy(from, to).await
+    }
+
+    async fn copy_if_not_exists(&self, from: &ObjectStorePath, to: &ObjectStorePath) -> ObjectStoreResult<()> {
+        self.inner.copy_if_not_exists(from, to).await
+    }
+
+    async fn rename(&self, from: &ObjectStorePath, to: &ObjectStorePath) -> ObjectStoreResult<()> {
+        self.inner.rename(from, to).await
     }
 }
 
